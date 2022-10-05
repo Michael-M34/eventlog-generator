@@ -35,10 +35,61 @@ STEP_OUTPUTS = {
     'S':'PHOTOS SHIPPED',
     'T':'REMINDER TO PICK UP PHOTOS SENT',
     'U':'ORDER CLOSED',
+    'V':'EMAIL LINK TO PHOTOS SENT'
 }
 
-def invoice_handler(order_steps: list,atstudio,printed_photos):
+def invoice_handler(order_steps: list,atstudio,printed_photos,digital_photos):
     order_steps.append('E')
+
+    # Invoice reminder + collections step
+    invoice_reminder_count = 0
+    while True:
+        r=random()
+        if r<0.15:
+            invoice_reminder_count+=1
+            if invoice_reminder_count > 5:
+                order_steps.append('O')
+                print("Collections order")
+                return
+            order_steps.append('N')
+        else:
+            break
+
+    # People are now paying
+    if printed_photos:
+        r=random()
+        if r < 0.50:
+            order_steps.append('P')
+            order_steps.append('Q')
+        else:
+            order_steps.append('Q')
+            r=random()
+            if r < 0.90:
+                order_steps.append('S')
+            else:
+                while True:
+                    r=random()
+                    if r<0.1:
+                        order_steps.append('T')
+                    else:
+                        break
+
+    else:
+        r=random()
+        if r < 0.05:
+            order_steps.append('P')
+        order_steps.append('Q')
+
+    if (printed_photos==0 and digital_photos==0):
+        order_steps.append('R')
+
+    if digital_photos:
+        order_steps.append('V')
+
+    order_steps.append('U')
+
+    
+        
 
 def create_path(order_steps: list, atstudio):
     """
@@ -74,7 +125,7 @@ def create_path(order_steps: list, atstudio):
                     create_path(order_steps, atstudio)
                     return
                 else:
-                    invoice_handler(order_steps,atstudio,0)
+                    invoice_handler(order_steps,atstudio,0,0)
     else:
         if r < 0.05:
             order_steps.append('D')
@@ -84,7 +135,7 @@ def create_path(order_steps: list, atstudio):
                     create_path(order_steps, atstudio)
                     return
                 else:
-                    invoice_handler(order_steps,atstudio,0)
+                    invoice_handler(order_steps,atstudio,0,0)
 
     # Uploaded photos and notified customer
     order_steps.append('F')
@@ -99,7 +150,7 @@ def create_path(order_steps: list, atstudio):
             if r < 0.075:
                 order_steps.append('E')
             else:
-                invoice_handler(order_steps, atstudio,0)
+                invoice_handler(order_steps, atstudio,0,0)
 
 
     # Placing order step
@@ -115,16 +166,28 @@ def create_path(order_steps: list, atstudio):
                 r=random()
                 if r < 0.9:
                     break
-
+        
+        # Photos edited
         order_steps.append('K')
 
-    
+    # Printing / Digital step
+    getting_printed = 1
+    getting_digital = 1
+    r=random()
+    if r < 90:
+        getting_printed = 0
+    elif r < 95:
+        getting_digital = 0
 
-    
+    if getting_printed:
+        order_steps.append('L')
 
-            
+    if getting_digital:
+        order_steps.append('M')
 
-    
+    invoice_handler(order_steps, atstudio,getting_printed, getting_digital)
+
+
 
 
 def create_entries(orders_list):

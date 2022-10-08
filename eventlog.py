@@ -8,7 +8,7 @@ from random import random
 from numpy import void
 
 # TODO: UPDATE THIS VALUE
-NUM_ORDERS_PER_LOC = 3600
+NUM_ORDERS_PER_LOC = 3780
 
 # TODO: UPDATE THIS VALUE
 NUM_LOCATIONS = 1
@@ -126,6 +126,7 @@ def create_path(order_steps: list, atstudio):
                     return
                 else:
                     invoice_handler(order_steps,atstudio,0,0)
+                    return
     else:
         if r < 0.05:
             order_steps.append('D')
@@ -136,6 +137,7 @@ def create_path(order_steps: list, atstudio):
                     return
                 else:
                     invoice_handler(order_steps,atstudio,0,0)
+                    return
 
     # Uploaded photos and notified customer
     order_steps.append('F')
@@ -151,6 +153,7 @@ def create_path(order_steps: list, atstudio):
                 order_steps.append('E')
             else:
                 invoice_handler(order_steps, atstudio,0,0)
+                return
 
 
     # Placing order step
@@ -185,19 +188,56 @@ def create_path(order_steps: list, atstudio):
     if getting_digital:
         order_steps.append('M')
 
-    invoice_handler(order_steps, atstudio,getting_printed, getting_digital)
+    invoice_handler(order_steps, atstudio, getting_printed, getting_digital)
+
+def get_personal_or_corporate():
+    # 10% orders are corporate
+    # 90% are personal
+    # 1% of corporate orders are cancelled
+    # 5.5% of personal orders are cancelled
+    # 100% of corporate orders are on location
+    # 10% of personal orders are on location
+    r=random()
+    if r < 0.1:
+        return 1
+    else:
+        return 0
+
+def get_location_or_studio(is_corporate):
+
+    if is_corporate:
+        return 0
+    else:
+        r=random()
+        if r < 0.9:
+            return 1
+        else:
+            return 0
 
 
+
+def create_order_object(order_id):
+    is_corporate = get_personal_or_corporate()
+    return {
+        'order_num': order_id,
+        'path': [],
+        'is_corporate': is_corporate,
+        'at_studio': get_location_or_studio(is_corporate),
+        'printed_photos': 0,
+        'digital_photos': 0,
+        'invoice_value': 0,
+        'booking_time': 0,
+    }
 
 
 def create_entries(orders_list):
+    order_list_num = 1
     for location in range(NUM_LOCATIONS):
         orders_list.append([])
         for order in range(NUM_ORDERS_PER_LOC):
-            orders_list[location].append([])
-            create_path(orders_list[location][order], 1)
-            
-
+            orders_list[location].append(create_order_object(order_list_num))
+            create_path(orders_list[location][order]['path'], orders_list[location][order]['at_studio'])
+            order_list_num+=1
 
 
 if __name__ == "__main__":
@@ -210,10 +250,12 @@ if __name__ == "__main__":
     with open('eventlog.csv', 'w') as f:
         writer = csv.writer(f)
 
+        corporate_orders = 0
+
         for location in orders_list:
             for order in location:
-                for step in order:
-                    writer.writerow([STEP_OUTPUTS[step]])
+                for step in order['path']:
+                    writer.writerow([f'{order["order_num"]};{STEP_OUTPUTS[step]}'])
 
 
         f.close()

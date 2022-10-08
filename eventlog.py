@@ -91,23 +91,29 @@ def invoice_handler(order_steps: list,atstudio,printed_photos,digital_photos):
     
         
 
-def create_path(order_steps: list, atstudio):
+def create_path(order_steps: list, atstudio, is_corporate):
     """
     Creates the path for the order to take
     """
     
     # DETAILS ENTERED STEP
-
-    order_steps.append('A')
-
+    # 1% of corporate orders are cancelled
+    # 5.5% of personal orders are cancelled
     while (True):
         r=random()
-
-        if r < 0.94:
-            break
-        elif r < 0.99:
-            order_steps.append('B')
-            return
+        order_steps.append('A')
+        if (is_corporate):
+            if r < 0.97:
+                break
+            elif r < 0.98:
+                order_steps.append('B')
+                return
+        else:
+            if r < 0.925:
+                break
+            elif r < 0.98:
+                order_steps.append('B')
+                return
 
 
     # Check-in step
@@ -122,7 +128,7 @@ def create_path(order_steps: list, atstudio):
             if r < 0.13:
                 r=random()
                 if r < 0.35:
-                    create_path(order_steps, atstudio)
+                    create_path(order_steps, atstudio, is_corporate)
                     return
                 else:
                     invoice_handler(order_steps,atstudio,0,0)
@@ -133,7 +139,7 @@ def create_path(order_steps: list, atstudio):
             if r < 0.02:
                 r=random()
                 if r < 0.35:
-                    create_path(order_steps, atstudio)
+                    create_path(order_steps, atstudio, is_corporate)
                     return
                 else:
                     invoice_handler(order_steps,atstudio,0,0)
@@ -193,10 +199,6 @@ def create_path(order_steps: list, atstudio):
 def get_personal_or_corporate():
     # 10% orders are corporate
     # 90% are personal
-    # 1% of corporate orders are cancelled
-    # 5.5% of personal orders are cancelled
-    # 100% of corporate orders are on location
-    # 10% of personal orders are on location
     r=random()
     if r < 0.1:
         return 1
@@ -204,7 +206,8 @@ def get_personal_or_corporate():
         return 0
 
 def get_location_or_studio(is_corporate):
-
+    # 100% of corporate orders are on location
+    # 10% of personal orders are on location
     if is_corporate:
         return 0
     else:
@@ -236,7 +239,7 @@ def create_entries(orders_list):
         orders_list.append([])
         for order in range(NUM_ORDERS_PER_LOC):
             orders_list[location].append(create_order_object(order_list_num))
-            create_path(orders_list[location][order]['path'], orders_list[location][order]['at_studio'])
+            create_path(orders_list[location][order]['path'], orders_list[location][order]['at_studio'], orders_list[location][order]['is_corporate'])
             order_list_num+=1
 
 
@@ -255,7 +258,6 @@ if __name__ == "__main__":
         for location in orders_list:
             for order in location:
                 for step in order['path']:
-                    writer.writerow([f'{order["order_num"]};{STEP_OUTPUTS[step]}'])
-
+                     writer.writerow([f'{order["order_num"]};{STEP_OUTPUTS[step]}'])
 
         f.close()

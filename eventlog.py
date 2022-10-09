@@ -5,7 +5,7 @@ This is a python eventlog generator for INFS3604
 import csv
 from random import random
 
-from numpy import void
+import numpy
 
 # TODO: UPDATE THIS VALUE
 NUM_ORDERS_PER_LOC = 3780
@@ -236,11 +236,35 @@ def create_order_object(order_id):
 def create_entries(orders_list):
     order_list_num = 1
     for location in range(NUM_LOCATIONS):
-        orders_list.append([])
+        orders_list.append({
+            "photographer_studio1": [0]*200*8,
+            "photographer_studio2": [0]*200*8,
+            "photographer_location1": [0]*200,
+            "photographer_location2": [0]*200,
+            "orders":[],
+        })
         for order in range(NUM_ORDERS_PER_LOC):
-            orders_list[location].append(create_order_object(order_list_num))
-            create_path(orders_list[location][order]['path'], orders_list[location][order]['at_studio'], orders_list[location][order]['is_corporate'])
+            orders_list[location]["orders"].append(create_order_object(order_list_num))
+            create_path(orders_list[location]["orders"][order]['path'], orders_list[location]["orders"][order]['at_studio'], orders_list[location]["orders"][order]['is_corporate'])
             order_list_num+=1
+
+def get_booking_times(location):
+
+    #  Look through orders and start slotting them into the photographer calendars
+    for order in location["orders"]:
+        if order["at_studio"]:
+            pg1_index = location["photographer_studio1"].index(0)
+            pg2_index = location["photographer_studio2"].index(0)
+            if (pg2_index < pg1_index):
+                location["photographer_studio2"][pg2_index] = 1
+                order["booking_time"] = pg2_index
+            else:
+                location["photographer_studio1"][pg1_index] = 1
+                order["booking_time"] = pg1_index
+        else:
+            pass 
+
+
 
 
 if __name__ == "__main__":
@@ -249,6 +273,8 @@ if __name__ == "__main__":
 
     orders_list = []
     create_entries(orders_list)
+    for loc in orders_list:
+        get_booking_times(loc)
 
     with open('eventlog.csv', 'w') as f:
         writer = csv.writer(f)
@@ -256,8 +282,9 @@ if __name__ == "__main__":
         corporate_orders = 0
 
         for location in orders_list:
-            for order in location:
+            for order in location["orders"]:
                 for step in order['path']:
-                     writer.writerow([f'{order["order_num"]};{STEP_OUTPUTS[step]}'])
+
+                     writer.writerow([f'{order["order_num"]};{STEP_OUTPUTS[step]};at_studio:{order["at_studio"]};day:{order["booking_time"]//8};hour:{order["booking_time"]%8}'])
 
         f.close()

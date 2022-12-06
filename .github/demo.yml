@@ -1,0 +1,8 @@
+name: Initial testing
+run-name: $${ github.actor } is running this thingy
+on: [push]
+jobs:
+  Run-Tests:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Hello! This works!"

@@ -5,6 +5,7 @@ This is a python eventlog generator for INFS3604
 import csv
 from random import random
 
+
 import numpy
 
 # TODO: UPDATE THIS VALUE

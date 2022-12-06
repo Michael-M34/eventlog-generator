@@ -1,5 +1,5 @@
-name: Initial testing
-run-name: Quick sanity check
+name: Sanity check
+run-name: Check if eventlog.py works
 on: [push]
 jobs:
   Run-Tests:

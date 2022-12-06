@@ -1,8 +1,14 @@
 name: Initial testing
-run-name: $${ github.actor } is running this thingy
+run-name: Quick sanity check
 on: [push]
 jobs:
   Run-Tests:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
       - run: echo "Hello! This works!"
+      

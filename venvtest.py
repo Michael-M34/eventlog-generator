@@ -1,5 +1,6 @@
 import simpy
 import random
+from generate_events import *
 
 NUM_STUDIOS = 4
 NUM_ORDERS = 100
@@ -23,7 +24,17 @@ class Fotof_studio(object):
     def edit_photos(self, in_studio: bool, customer):
         yield self.env.timeout(random.randint(3,4))
 
-# 
+# HELPER FUNCTIONS 
+
+def get_num_photographers():
+    return 1
+
+def get_num_editors():
+    return 1
+
+
+
+# Simulate the use of a fotof studio for a single customer
 def use_fotof(env, fotof_studio, customer):
     start_time = env.now
 
@@ -38,18 +49,12 @@ def use_fotof(env, fotof_studio, customer):
         yield env.process(fotof_studio.edit_photos(True, customer))
 
 
+# Simulate the operation of the entire fotof studio for a list of orders
 def simulate_fotof_studio(env, fotof_studio, orders: list):
     for customer in orders:
         yield env.timeout(1)
         env.process(use_fotof(env, fotof_studio, customer))
 
-
-
-def get_num_photographers():
-    return 1
-
-def get_num_editors():
-    return 1
 
 if __name__ == "__main__":
     # Create environment to be simulated

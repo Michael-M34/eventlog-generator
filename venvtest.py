@@ -1,6 +1,7 @@
 import simpy
 import random
 from generate_events import *
+from datetime import datetime, timedelta
 
 import csv
 
@@ -28,6 +29,9 @@ class Fotof_studio(object):
     def edit_photos(self, in_studio: bool, customer):
         yield self.env.timeout(random.randint(3,4))
 
+    def wait(self, customer, time_mins):
+        yield self.env.timeout(time_mins)
+
 # HELPER FUNCTIONS 
 
 def get_num_photographers():
@@ -38,6 +42,21 @@ def get_studio_or_location(is_personal):
         return AT_STUDIO
     else:
         return generate_outcome(PERSONAL_ON_LOCATION)
+
+    
+def disp_time(env_time_mins):
+    """
+    Returns the env time in string format to be printed to the eventlog
+    """
+    time = datetime(2020, 1, 1, 0, 0, 0, 0)
+
+    time += timedelta(seconds=(env_time_mins*60))
+
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+def days_to_mins(num_days):
+    return num_days*24*60
+
 
 
 # Simulate the use of a fotof studio for a single customer
@@ -50,8 +69,6 @@ def use_fotof(env, fotof_studio, customer, writer):
     printed = False
     digital = False
 
-    time = 0
-
     while True:
 
         # Booking stage
@@ -62,14 +79,17 @@ def use_fotof(env, fotof_studio, customer, writer):
                 booking_status = generate_outcome(COROPRATE_BOOKING)
             
             if booking_status == BOOKING_MADE:
-                writer.writerow([f'{customer:05d};"DETAILS ENTERED";"2020-01-01T00:00:{time:02d}"'])
+                writer.writerow([f'{customer:05d};"DETAILS ENTERED";"{disp_time(env.now)}"'])
                 break
             elif booking_status == BOOKING_CANCELLED:
                 writer.writerow([f"{customer:05d}: DETAILS ENTERED"])
                 writer.writerow([f"{customer:05d}: BOOKING CANCELLED"])
                 return
 
+        # Wait 3-40 days
+
         # Check-in stage
+
 
         writer.writerow([f"{customer:05d}: PHOTOGRAPHER CHECKED IN"])
 

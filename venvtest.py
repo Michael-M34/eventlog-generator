@@ -48,7 +48,7 @@ def disp_time(env_time_mins):
     """
     Returns the env time in string format to be printed to the eventlog
     """
-    time = datetime(2020, 1, 1, 0, 0, 0, 0)
+    time = datetime(2018, 1, 1, 0, 0, 0, 0)
 
     time += timedelta(seconds=(env_time_mins*60))
 
@@ -57,11 +57,53 @@ def disp_time(env_time_mins):
 def days_to_mins(num_days):
     return num_days*24*60
 
+def in_photographer_working_hours(time_mins):
+    # Bring down to a week time frame
+    new_time = time_mins % 10080
 
+    # Return false if saturday or sunday
+    if new_time >= 7200:
+        return False
+    
+    # Bring down to a day time frame
+    new_time = new_time % 1440
+
+    # Return false if time of day is before 9am or after 5pm
+    if new_time > 1020 or new_time < 540:
+        return False 
+
+    # If this point is reached, then it is working hours, therefore return true
+    return True
+
+def wait_until_working_hours(env):
+    print("HELLo")
+    # Keep adding delays until we're within business hours
+    while not in_photographer_working_hours(env.now):
+        # Bring down to week time frame
+        time_mins = env.now % 10080
+
+        print(f"TIME AFTER WEEK FRAME: {disp_time(time_mins)}")
+        if True:
+            print("HI")
+
+        if time_mins > 6870:
+            yield env.timeout(1)
+
+        # If after 5pm on friday, wait until monday morning
+        # if time_mins > 6780:
+        #     # Get time difference between time and Monday 9am delay that time until monday morning
+        #     yield env.timeout(10620 - time_mins)
+    #     # Case where it's before 9am in the day
+    #     elif (time_mins % 1440) < 540:
+    #         # Wait the difference between now and 9am
+    #         yield env.timeout(540 - (time_mins % 1440))
+    #     # Case where it's after 5pm on a day
+    #     elif (time_mins % 1440) > 1020:
+    #         yield env.timeout(1980 - (time_mins % 1440))
 
 # Simulate the use of a fotof studio for a single customer
 def use_fotof(env, fotof_studio, customer, writer):
-    
+
     # Get info about the order 
     is_personal = bool(generate_outcome(PERSONAL_OR_CORPORATE))
     at_studio = bool(get_studio_or_location(is_personal))
@@ -82,16 +124,27 @@ def use_fotof(env, fotof_studio, customer, writer):
                 writer.writerow([f'{customer:05d};"DETAILS ENTERED";"{disp_time(env.now)}"'])
                 break
             elif booking_status == BOOKING_CANCELLED:
-                writer.writerow([f"{customer:05d}: DETAILS ENTERED"])
-                writer.writerow([f"{customer:05d}: BOOKING CANCELLED"])
+                writer.writerow([f'{customer:05d};"DETAILS ENTERED";"{disp_time(env.now)}"'])
+
+                # Wait 3-20 days to cancel
+                yield env.timeout(random.randint(3*60*24, 20*60*24))
+
+                writer.writerow([f'{customer:05d};"BOOKING CANCELLED";"{disp_time(env.now)}"'])
                 return
 
         # Wait 3-40 days
+        yield env.timeout(60*random.randint(3*24, 40*24))
+
+        # Check to see if we're at a specific hour mark otherwise wait until the next business hour
+        # while not in_photographer_working_hours(env.now) and env.now % 60 != 0:
+        print(f"Current time before wait: {disp_time(env.now)}")
+        wait_until_working_hours(env)
+        print(f"Time after waiting until business hours: {disp_time(env.now)}")
 
         # Check-in stage
 
 
-        writer.writerow([f"{customer:05d}: PHOTOGRAPHER CHECKED IN"])
+        writer.writerow([f'{customer:05d};"PHOTOGRAPHER CHECKED IN";"{disp_time(env.now)}"'])
 
         if at_studio:
             checkin_status = generate_outcome(STUDIO_CHECK_IN)

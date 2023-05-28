@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import csv
 
 NUM_STUDIOS = 1
-NUM_ORDERS = 100
+NUM_ORDERS = 20
 
 NUM_EDITORS = 2
 
@@ -43,6 +43,10 @@ def get_studio_or_location(is_personal):
     else:
         return generate_outcome(PERSONAL_ON_LOCATION)
 
+def hours_to_mins(hours):
+    return hours*60
+
+
     
 def disp_time(env_time_mins):
     """
@@ -57,23 +61,29 @@ def disp_time(env_time_mins):
 def days_to_mins(num_days):
     return num_days*24*60
 
+
+
 def in_photographer_working_hours(time_mins):
     # Bring down to a week time frame
-    new_time = time_mins % 10080
+    new_time = time_mins % days_to_mins(7)
 
     # Return false if saturday or sunday
-    if new_time >= 7200:
+    if new_time >= days_to_mins(5):
         return False
     
     # Bring down to a day time frame
-    new_time = new_time % 1440
+    new_time = new_time % days_to_mins(1)
 
-    # Return false if time of day is before 9am or after 5pm
-    if new_time > 1020 or new_time < 540:
+    # Return false if time of day is before 9am or after 4pm
+    if new_time > hours_to_mins(16) or new_time < hours_to_mins(9):
         return False 
 
     # If this point is reached, then it is working hours, therefore return true
     return True
+
+"""
+
+THERE APPEARS TO BE SOME ISSUES IN THE LIBRARY THAT DOESN"T ALLOW FOR LOTS OF NESTING, HENCE THIS SECTION IS COMMENTED OUT FOR NOW
 
 def wait_until_working_hours(env):
     print("HELLo")
@@ -100,6 +110,8 @@ def wait_until_working_hours(env):
     #     # Case where it's after 5pm on a day
     #     elif (time_mins % 1440) > 1020:
     #         yield env.timeout(1980 - (time_mins % 1440))
+
+"""
 
 # Simulate the use of a fotof studio for a single customer
 def use_fotof(env, fotof_studio, customer, writer):
@@ -136,10 +148,41 @@ def use_fotof(env, fotof_studio, customer, writer):
         yield env.timeout(60*random.randint(3*24, 40*24))
 
         # Check to see if we're at a specific hour mark otherwise wait until the next business hour
-        # while not in_photographer_working_hours(env.now) and env.now % 60 != 0:
-        print(f"Current time before wait: {disp_time(env.now)}")
-        wait_until_working_hours(env)
-        print(f"Time after waiting until business hours: {disp_time(env.now)}")
+
+        if in_photographer_working_hours(env.now):
+            print(f'{customer} in working hours')
+            print(f'{(env.now % 60)}')
+            if (env.now % 60) == 0:
+                print(f'{customer} on the hour')
+        
+        while (in_photographer_working_hours(env.now) == False) and ((env.now % 60) != 0):
+            # Bring timeframe down to the week scale so we can run a bunch of checks
+            time_mins = env.now % days_to_mins(7)
+            print("Customer ", customer,  " Can't get out at time ", disp_time(env.now))
+
+            # If the current time is after friday 4pm, wait until monday morning at 9am
+            if time_mins > days_to_mins(5) + hours_to_mins(16):
+                yield env.timeout((days_to_mins(7) + hours_to_mins(9)) - time_mins)
+            
+            # If it's before 9am on a business day, wait until 9am
+            elif (time_mins % days_to_mins(1)) < hours_to_mins(9):
+                yield env.timeout(hours_to_mins(9) - (time_mins % days_to_mins(1)))
+
+            # If it's after 4pm on a business day, wait until 9am
+            elif (time_mins % days_to_mins(1)) > hours_to_mins(16):
+                yield env.timeout(days_to_mins(1) + hours_to_mins(9) - (time_mins % days_to_mins(1)))
+
+            # The only other option is that we're not exactly on the hour, hence wait until the next hour
+            else:
+                yield env.timeout(hours_to_mins(1) - (time_mins % 60))
+
+            
+
+        # print(f"Current time before wait: {disp_time(env.now)}")
+        # wait_until_working_hours(env)
+        # print(f"Time after waiting until business hours: {disp_time(env.now)}")
+
+        print(f'{customer} got out at {disp_time(env.now)}')
 
         # Check-in stage
 

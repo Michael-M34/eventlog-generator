@@ -8,7 +8,7 @@ import csv
 NUM_STUDIOS = 1
 NUM_ORDERS = 20
 
-NUM_EDITORS = 2
+NUM_TECHS = 2
 
 class Fotof_studio(object):
     """
@@ -18,10 +18,10 @@ class Fotof_studio(object):
     - photographers
     - editors
     """
-    def __init__(self, env, num_photographers, num_editors):
+    def __init__(self, env, num_photographers, num_techs):
         self.env = env 
         self.photographer = simpy.Resource(env, num_photographers)
-        self.editor = simpy.Resource(env, num_editors)
+        self.techs = simpy.Resource(env, num_techs)
 
     def take_photos(self, in_studio: bool, customer):
         yield self.env.timeout(random.randint(1,3))
@@ -81,41 +81,32 @@ def in_photographer_working_hours(time_mins):
     # If this point is reached, then it is working hours, therefore return true
     return True
 
-"""
-
-THERE APPEARS TO BE SOME ISSUES IN THE LIBRARY THAT DOESN"T ALLOW FOR LOTS OF NESTING, HENCE THIS SECTION IS COMMENTED OUT FOR NOW
 
 def wait_until_working_hours(env):
-    print("HELLo")
     # Keep adding delays until we're within business hours
-    while not in_photographer_working_hours(env.now):
-        # Bring down to week time frame
-        time_mins = env.now % 10080
+    while (in_photographer_working_hours(env.now) == False) or ((env.now % 60) != 0):
+        # Bring timeframe down to the week scale so we can run a bunch of checks
+        time_mins = env.now % days_to_mins(7)
+        # print("Customer ", customer,  " Can't get out at time ", disp_time(env.now), " ", print_day_of_week(time_mins))
 
-        print(f"TIME AFTER WEEK FRAME: {disp_time(time_mins)}")
-        if True:
-            print("HI")
+        # If the current time is after friday 4pm, wait until monday morning at 9am
+        if time_mins > days_to_mins(5) + hours_to_mins(16):
+            yield env.timeout((days_to_mins(7) + hours_to_mins(9)) - time_mins)
+        
+        # If it's before 9am on a business day, wait until 9am
+        elif (time_mins % days_to_mins(1)) < hours_to_mins(9):
+            yield env.timeout(hours_to_mins(9) - (time_mins % days_to_mins(1)))
 
-        if time_mins > 6870:
-            yield env.timeout(1)
+        # If it's after 4pm on a business day, wait until 9am
+        elif (time_mins % days_to_mins(1)) > hours_to_mins(16):
+            yield env.timeout(days_to_mins(1) + hours_to_mins(9) - (time_mins % days_to_mins(1)))
 
-        # If after 5pm on friday, wait until monday morning
-        # if time_mins > 6780:
-        #     # Get time difference between time and Monday 9am delay that time until monday morning
-        #     yield env.timeout(10620 - time_mins)
-    #     # Case where it's before 9am in the day
-    #     elif (time_mins % 1440) < 540:
-    #         # Wait the difference between now and 9am
-    #         yield env.timeout(540 - (time_mins % 1440))
-    #     # Case where it's after 5pm on a day
-    #     elif (time_mins % 1440) > 1020:
-    #         yield env.timeout(1980 - (time_mins % 1440))
-
-"""
+        # The only other option is that we're not exactly on the hour, hence wait until the next hour
+        else:
+            yield env.timeout(hours_to_mins(1) - (time_mins % 60))
 
 # Simulate the use of a fotof studio for a single customer
 def use_fotof(env, fotof_studio, customer, writer):
-
     # Get info about the order 
     is_personal = bool(generate_outcome(PERSONAL_OR_CORPORATE))
     at_studio = bool(get_studio_or_location(is_personal))
@@ -147,44 +138,27 @@ def use_fotof(env, fotof_studio, customer, writer):
         # Wait 3-40 days
         yield env.timeout(60*random.randint(3*24, 40*24))
 
-        # Check to see if we're at a specific hour mark otherwise wait until the next business hour
 
-        if in_photographer_working_hours(env.now):
-            print(f'{customer} in working hours')
-            print(f'{(env.now % 60)}')
-            if (env.now % 60) == 0:
-                print(f'{customer} on the hour')
-        
-        while (in_photographer_working_hours(env.now) == False) and ((env.now % 60) != 0):
-            # Bring timeframe down to the week scale so we can run a bunch of checks
-            time_mins = env.now % days_to_mins(7)
-            print("Customer ", customer,  " Can't get out at time ", disp_time(env.now))
+        duration = random.randint(4,6) if is_personal else random.randint(4,8)
 
-            # If the current time is after friday 4pm, wait until monday morning at 9am
-            if time_mins > days_to_mins(5) + hours_to_mins(16):
-                yield env.timeout((days_to_mins(7) + hours_to_mins(9)) - time_mins)
+        print(f'Job {customer} started queueing at {disp_time(env.now)}')
+
+        with fotof_studio.photographer.request() as photographer:
+                yield photographer
+
+                while True:
             
-            # If it's before 9am on a business day, wait until 9am
-            elif (time_mins % days_to_mins(1)) < hours_to_mins(9):
-                yield env.timeout(hours_to_mins(9) - (time_mins % days_to_mins(1)))
+                    if in_photographer_working_hours(env.now) and in_photographer_working_hours(env.now + hours_to_mins(duration)) and (env.now % 60 == 0):
+                        break
 
-            # If it's after 4pm on a business day, wait until 9am
-            elif (time_mins % days_to_mins(1)) > hours_to_mins(16):
-                yield env.timeout(days_to_mins(1) + hours_to_mins(9) - (time_mins % days_to_mins(1)))
+                    if in_photographer_working_hours(env.now):
+                        yield env.timeout(hours_to_mins(duration))
 
-            # The only other option is that we're not exactly on the hour, hence wait until the next hour
-            else:
-                yield env.timeout(hours_to_mins(1) - (time_mins % 60))
-
-            
-
-        # print(f"Current time before wait: {disp_time(env.now)}")
-        # wait_until_working_hours(env)
-        # print(f"Time after waiting until business hours: {disp_time(env.now)}")
+                    yield env.process(wait_until_working_hours(env))
 
         print(f'{customer} got out at {disp_time(env.now)}')
 
-        # Check-in stage
+        
 
 
         writer.writerow([f'{customer:05d};"PHOTOGRAPHER CHECKED IN";"{disp_time(env.now)}"'])
@@ -298,19 +272,12 @@ def use_fotof(env, fotof_studio, customer, writer):
     if digital or printed:
         writer.writerow([f"{customer:05d}: ORDER CLOSED"])
 
-        
-
     
 
     with fotof_studio.photographer.request() as request:
         yield request
         yield env.process(fotof_studio.take_photos(True, customer))
 
-    
-
-    with fotof_studio.editor.request() as request:
-        yield request
-        yield env.process(fotof_studio.edit_photos(True, customer))
 
     # Invoice stage
 
@@ -329,7 +296,7 @@ if __name__ == "__main__":
     # Create the different studios
     fotof_studios = []
     for i in range(NUM_STUDIOS):
-        fotof_studios.append(Fotof_studio(env, get_num_photographers(), NUM_EDITORS))
+        fotof_studios.append(Fotof_studio(env, get_num_photographers(), NUM_TECHS))
 
     # Order ids contains the order ids for each studio
     order_ids = [[] for _ in range(NUM_STUDIOS)]

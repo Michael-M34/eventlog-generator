@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import csv
 
 NUM_STUDIOS = 1
-NUM_ORDERS = 20
+NUM_ORDERS = 2000
 
 NUM_TECHS = 2
 
@@ -21,7 +21,7 @@ class Fotof_studio(object):
     def __init__(self, env, num_photographers, num_techs):
         self.env = env 
         self.photographer = simpy.Resource(env, num_photographers)
-        self.techs = simpy.Resource(env, num_techs)
+        self.tech = simpy.Resource(env, num_techs)
 
     def take_photos(self, in_studio: bool, customer):
         yield self.env.timeout(random.randint(1,3))
@@ -45,6 +45,22 @@ def get_studio_or_location(is_personal):
 
 def hours_to_mins(hours):
     return hours*60
+
+def disp_day(time_mins):
+    days_dict = {
+        "0": "Monday",
+        "1": "Tuesday",
+        '2': 'Wednesday',
+        '3': 'Thursday',
+        '4': 'Friday',
+        '5': 'Saturday',
+        '6': 'Sunday',
+    }
+
+    time = time_mins % days_to_mins(7)
+
+    return days_dict[str(int(time/(days_to_mins(1))))]
+
 
 
     
@@ -81,29 +97,23 @@ def in_photographer_working_hours(time_mins):
     # If this point is reached, then it is working hours, therefore return true
     return True
 
+def in_tech_working_hours(time_mins):
+    # Bring down to a week time frame
+    new_time = time_mins % days_to_mins(7)
 
-def wait_until_working_hours(env):
-    # Keep adding delays until we're within business hours
-    while (in_photographer_working_hours(env.now) == False) or ((env.now % 60) != 0):
-        # Bring timeframe down to the week scale so we can run a bunch of checks
-        time_mins = env.now % days_to_mins(7)
-        # print("Customer ", customer,  " Can't get out at time ", disp_time(env.now), " ", print_day_of_week(time_mins))
+    # Return false if saturday or sunday
+    if new_time >= days_to_mins(5):
+        return False
+    
+    # Bring down to a day time frame
+    new_time = new_time % days_to_mins(1)
 
-        # If the current time is after friday 4pm, wait until monday morning at 9am
-        if time_mins > days_to_mins(5) + hours_to_mins(16):
-            yield env.timeout((days_to_mins(7) + hours_to_mins(9)) - time_mins)
-        
-        # If it's before 9am on a business day, wait until 9am
-        elif (time_mins % days_to_mins(1)) < hours_to_mins(9):
-            yield env.timeout(hours_to_mins(9) - (time_mins % days_to_mins(1)))
+    # Return false if time of day is before 9am or after 4pm
+    if new_time > hours_to_mins(15.5) or new_time < hours_to_mins(8.5):
+        return False 
 
-        # If it's after 4pm on a business day, wait until 9am
-        elif (time_mins % days_to_mins(1)) > hours_to_mins(16):
-            yield env.timeout(days_to_mins(1) + hours_to_mins(9) - (time_mins % days_to_mins(1)))
-
-        # The only other option is that we're not exactly on the hour, hence wait until the next hour
-        else:
-            yield env.timeout(hours_to_mins(1) - (time_mins % 60))
+    # If this point is reached, then it is working hours, therefore return true
+    return True
 
 # Simulate the use of a fotof studio for a single customer
 def use_fotof(env, fotof_studio, customer, writer):
@@ -138,30 +148,54 @@ def use_fotof(env, fotof_studio, customer, writer):
         # Wait 3-40 days
         yield env.timeout(60*random.randint(3*24, 40*24))
 
-
-        duration = random.randint(4,6) if is_personal else random.randint(4,8)
-
-        print(f'Job {customer} started queueing at {disp_time(env.now)}')
-
-        with fotof_studio.photographer.request() as photographer:
-                yield photographer
-
-                while True:
-            
-                    if in_photographer_working_hours(env.now) and in_photographer_working_hours(env.now + hours_to_mins(duration)) and (env.now % 60 == 0):
-                        break
-
-                    if in_photographer_working_hours(env.now):
-                        yield env.timeout(hours_to_mins(duration))
-
-                    yield env.process(wait_until_working_hours(env))
-
-        print(f'{customer} got out at {disp_time(env.now)}')
-
+        if is_personal:
+            duration = 1 if at_studio else random.randint(4,6)
+        else:
+            duration = random.randint(4,8)
         
 
+        # # Wait until a photographer is free then grab a slot
+        # with fotof_studio.photographer.request() as photographer:
+        #         yield photographer
 
-        writer.writerow([f'{customer:05d};"PHOTOGRAPHER CHECKED IN";"{disp_time(env.now)}"'])
+        #         # Wait until next exact hour mark if not on it already
+        #         if (env.now % 60 != 0):
+        #             yield env.timeout(60 - env.now % 60)
+
+        #         # If duration won't fit into working hours, delay over to out of hours
+        #         if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+hours_to_mins(duration))):
+        #             yield env.timeout(hours_to_mins(duration+1))
+
+        #         # Delay until start of next working day if out of hours
+        #         if not(in_photographer_working_hours(env.now)):
+        #             yield env.process(wait_until_photographer_working_hours(env))
+
+        #             # Assuming we're at 9am, make it look like job doesn't just start at 9am
+        #             yield env.timeout(hours_to_mins(random.randint(0, 8-duration)))
+
+        # print(f'{customer} Before waiting for photographer {disp_time(env.now)} with duration {duration} hours')
+
+        while True:
+            # Wait for a photographer and try grab a slot, if not able to, wait until the next day and try again
+            with fotof_studio.photographer.request() as photographer:
+                yield photographer
+                if (env.now % 60 != 0):
+                    yield env.timeout(60 - (env.now % 60))
+
+                if in_photographer_working_hours(env.now) and in_photographer_working_hours(env.now + hours_to_mins(duration-1)):
+                    writer.writerow([f'{customer:05d};"PHOTOGRAPHER CHECKED IN";"{disp_time(env.now)}"'])
+                    yield env.timeout(hours_to_mins(duration))
+                    break
+
+            if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+hours_to_mins(duration))):
+                    yield env.timeout(hours_to_mins(duration+1))
+
+            if not(in_photographer_working_hours(env.now)):
+                yield env.process(wait_until_photographer_working_hours(env))
+                yield env.timeout(hours_to_mins(random.randint(0, 8-duration)))
+
+        # Photographer checked in stage (mark back in time when the customer contacted if late so that the photographer resource step works)
+        print(f'Photographer finished on ', disp_day(env.now))
 
         if at_studio:
             checkin_status = generate_outcome(STUDIO_CHECK_IN)
@@ -169,18 +203,68 @@ def use_fotof(env, fotof_studio, customer, writer):
             checkin_status = generate_outcome(LOCATION_CHECK_IN)
 
         if checkin_status == CHECK_IN_LATE:
-            writer.writerow([f"{customer:05d}: CONTACTED CUSTOMER"])
+            writer.writerow([f'{customer:05d};"CONTACTED CUSTOMER";"{disp_time(env.now - hours_to_mins(duration) + random.randint(5, 15))}"'])
         
         elif checkin_status == CHECK_IN_NO_SHOW:
-            writer.writerow([f"{customer:05d}: CONTACTED CUSTOMER"])
+            writer.writerow([f'{customer:05d};"CONTACTED CUSTOMER";"{disp_time(env.now - hours_to_mins(duration) + random.randint(5, 15))}"'])
             
             if generate_outcome(NO_SHOW_RESCHEDULED) == RESCHEDULED:
+                # Delay until midnight then wait until between 8:30 and 10:30am
+                yield env.timeout(hours_to_mins(24 + 8.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(2)))
                 continue
             else:
                 break
 
+        # Since job would've finished by 5pm, wait until photos get sent to editor at 5pm at the end of the day
+        yield env.timeout(hours_to_mins(17) - (env.now % hours_to_mins(24)))
+
+        # INITIAL PHOTO EDIT
+
+
+        # with fotof_studio.tech.request() as tech:
+        #     yield tech
+        #     if (env.now % 60 != 0):
+        #         yield env.timeout(60 - (env.now % 60))
+
+        #     if in_tech_working_hours(env.now) and in_tech_working_hours(env.now + hours_to_mins()):
+                
+        #         yield env.timeout(hours_to_mins(duration))
+        #         writer.writerow([f'{customer:05d};"PHOTO_UPLOADED";"{disp_time(env.now)}"'])
+        #         break
+
+        # if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+hours_to_mins(duration))):
+        #         yield env.timeout(hours_to_mins(duration+1))
+
+        # if not(in_photographer_working_hours(env.now)):
+        #     yield env.process(wait_until_photographer_working_hours(env))
+
+        tech_job_duration = random.randint(15,30)
+
+        # print(f"{customer} waiting for tech at {disp_time(env.now)}")
+        with fotof_studio.tech.request() as tech:
+            yield tech
+            # print(f"Tech starting {customer} at {disp_time(env.now)}")
+
+            # If duration won't fit into working hours, delay over to out of hours
+            if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + tech_job_duration - 15)):
+                # print(f"Job {customer} couldn't fit {duration} mins")
+                yield env.timeout(tech_job_duration + 15)
+                
+
+            # Delay until start of next working day if out of hours
+            if not(in_tech_working_hours(env.now)):
+                # print(f"Job {customer} out of hours at {disp_time(env.now)}")
+                yield env.process(wait_until_tech_working_hours(env))
+                # print(f'{customer} done waiting until business hours')
+                
+
+            yield env.timeout(tech_job_duration)
+
+        
+        print(f'Tech done with customer {customer} at {disp_time(env.now)} on {disp_day(env.now)}')
+
         # Photos are uploaded
-        writer.writerow([f"{customer:05d}: PHOTOS UPLOADED"])
+        writer.writerow([f'{customer:05d};"PHOTO_UPLOADED";"{disp_time(env.now)}"'])
 
         # Customer is notified of photos
         writer.writerow([f"{customer:05d}: CUSTOMER NOTIFIED OF GALLERY"])
@@ -272,12 +356,6 @@ def use_fotof(env, fotof_studio, customer, writer):
     if digital or printed:
         writer.writerow([f"{customer:05d}: ORDER CLOSED"])
 
-    
-
-    with fotof_studio.photographer.request() as request:
-        yield request
-        yield env.process(fotof_studio.take_photos(True, customer))
-
 
     # Invoice stage
 
@@ -287,6 +365,47 @@ def simulate_fotof_studio(env, fotof_studio, orders: list, writer):
     for customer in orders:
         yield env.timeout(1)
         env.process(use_fotof(env, fotof_studio, customer, writer))
+
+def wait_until_photographer_working_hours(env):
+    # Keep adding delays until we're within business hours
+    while (in_photographer_working_hours(env.now) == False) or ((env.now % 60) != 0):
+        # Bring timeframe down to the week scale so we can run a bunch of checks
+        time_mins = env.now % days_to_mins(7)
+        # print("Customer ", customer,  " Can't get out at time ", disp_time(env.now), " ", print_day_of_week(time_mins))
+
+        # If the current time is after friday 4pm, wait until monday morning at 9am
+        if time_mins > days_to_mins(4) + hours_to_mins(16):
+            yield env.timeout((days_to_mins(7) + hours_to_mins(9)) - time_mins)
+        
+        # If it's before 9am on a business day, wait until 9am
+        elif (time_mins % days_to_mins(1)) < hours_to_mins(9):
+            yield env.timeout(hours_to_mins(9) - (time_mins % days_to_mins(1)))
+
+        # If it's after 4pm on a business day, wait until 9am
+        elif (time_mins % days_to_mins(1)) > hours_to_mins(16):
+            yield env.timeout(days_to_mins(1) + hours_to_mins(9) - (time_mins % days_to_mins(1)))
+
+        # The only other option is that we're not exactly on the hour, hence wait until the next hour
+        else:
+            yield env.timeout(hours_to_mins(1) - (time_mins % 60))
+
+def wait_until_tech_working_hours(env):
+    # Keep adding delays until we're within business hours
+    while (in_tech_working_hours(env.now) == False):
+        # Bring timeframe down to the week scale so we can run a bunch of checks
+        time_mins = env.now % days_to_mins(7)
+
+        # If the current time is after friday 3:45pm, wait until monday morning at 8:30am
+        if time_mins > (days_to_mins(4) + hours_to_mins(15.5)):
+            yield env.timeout((days_to_mins(7) + hours_to_mins(8.5)) - time_mins)
+        
+        # If it's before 8:30am on a business day, wait until 8:30am
+        elif (time_mins % days_to_mins(1)) < hours_to_mins(8.5):
+            yield env.timeout(hours_to_mins(8.5) - (time_mins % days_to_mins(1)) + 10)
+
+        # If it's after 3:30pm on a business day, wait until 8:30am
+        elif (time_mins % days_to_mins(1)) > hours_to_mins(15.5):
+            yield env.timeout(days_to_mins(1) + hours_to_mins(8.5) - (time_mins % days_to_mins(1)))
 
 
 if __name__ == "__main__":

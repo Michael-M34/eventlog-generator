@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import csv
 
 NUM_STUDIOS = 1
-NUM_ORDERS = 2000
+NUM_ORDERS = 20
 
 NUM_TECHS = 2
 
@@ -154,27 +154,6 @@ def use_fotof(env, fotof_studio, customer, writer):
             duration = random.randint(4,8)
         
 
-        # # Wait until a photographer is free then grab a slot
-        # with fotof_studio.photographer.request() as photographer:
-        #         yield photographer
-
-        #         # Wait until next exact hour mark if not on it already
-        #         if (env.now % 60 != 0):
-        #             yield env.timeout(60 - env.now % 60)
-
-        #         # If duration won't fit into working hours, delay over to out of hours
-        #         if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+hours_to_mins(duration))):
-        #             yield env.timeout(hours_to_mins(duration+1))
-
-        #         # Delay until start of next working day if out of hours
-        #         if not(in_photographer_working_hours(env.now)):
-        #             yield env.process(wait_until_photographer_working_hours(env))
-
-        #             # Assuming we're at 9am, make it look like job doesn't just start at 9am
-        #             yield env.timeout(hours_to_mins(random.randint(0, 8-duration)))
-
-        # print(f'{customer} Before waiting for photographer {disp_time(env.now)} with duration {duration} hours')
-
         while True:
             # Wait for a photographer and try grab a slot, if not able to, wait until the next day and try again
             with fotof_studio.photographer.request() as photographer:
@@ -195,7 +174,6 @@ def use_fotof(env, fotof_studio, customer, writer):
                 yield env.timeout(hours_to_mins(random.randint(0, 8-duration)))
 
         # Photographer checked in stage (mark back in time when the customer contacted if late so that the photographer resource step works)
-        print(f'Photographer finished on ', disp_day(env.now))
 
         if at_studio:
             checkin_status = generate_outcome(STUDIO_CHECK_IN)
@@ -220,80 +198,128 @@ def use_fotof(env, fotof_studio, customer, writer):
 
         # INITIAL PHOTO EDIT
 
+        tech_job_duration = random.randint(15,30) if at_studio else random.randint(25,60)
 
-        # with fotof_studio.tech.request() as tech:
-        #     yield tech
-        #     if (env.now % 60 != 0):
-        #         yield env.timeout(60 - (env.now % 60))
-
-        #     if in_tech_working_hours(env.now) and in_tech_working_hours(env.now + hours_to_mins()):
-                
-        #         yield env.timeout(hours_to_mins(duration))
-        #         writer.writerow([f'{customer:05d};"PHOTO_UPLOADED";"{disp_time(env.now)}"'])
-        #         break
-
-        # if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+hours_to_mins(duration))):
-        #         yield env.timeout(hours_to_mins(duration+1))
-
-        # if not(in_photographer_working_hours(env.now)):
-        #     yield env.process(wait_until_photographer_working_hours(env))
-
-        tech_job_duration = random.randint(15,30)
-
-        # print(f"{customer} waiting for tech at {disp_time(env.now)}")
         with fotof_studio.tech.request() as tech:
             yield tech
-            # print(f"Tech starting {customer} at {disp_time(env.now)}")
 
             # If duration won't fit into working hours, delay over to out of hours
             if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + tech_job_duration - 15)):
-                # print(f"Job {customer} couldn't fit {duration} mins")
                 yield env.timeout(tech_job_duration + 15)
                 
 
             # Delay until start of next working day if out of hours
             if not(in_tech_working_hours(env.now)):
-                # print(f"Job {customer} out of hours at {disp_time(env.now)}")
                 yield env.process(wait_until_tech_working_hours(env))
-                # print(f'{customer} done waiting until business hours')
                 
 
             yield env.timeout(tech_job_duration)
-
-        
-        print(f'Tech done with customer {customer} at {disp_time(env.now)} on {disp_day(env.now)}')
 
         # Photos are uploaded
         writer.writerow([f'{customer:05d};"PHOTO_UPLOADED";"{disp_time(env.now)}"'])
 
         # Customer is notified of photos
-        writer.writerow([f"{customer:05d}: CUSTOMER NOTIFIED OF GALLERY"])
+        writer.writerow([f'{customer:05d};"CUSTOMER NOTIFIED OF GALLERY";"{disp_time(env.now)}"'])
 
         # Reminder step
 
         if generate_outcome(REMINDER_OF_PHOTOS) == CUSTOMER_REMINDED:
-            writer.writerow([f"{customer:05d}: CUSTOMER REMINDED OF GALLERY"])
+
+            yield env.timeout(days_to_mins(24) + hours_to_mins(24 + 8.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
+
+            writer.writerow([f'{customer:05d};"CUSTOMER REMINDED OF GALLERY";"{disp_time(env.now)}"'])
+
             after_reminder_status = generate_outcome(CUSTOMER_AFTER_REMINDER)
             
             if after_reminder_status != CUSTOMER_ORDERS:
+                yield env.timeout(days_to_mins(4) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
                 
                 if after_reminder_status == CUSTOMER_INVOICED:
                     break
 
-                writer.writerow([f"{customer:05d}: INVOICE ISSUED"])
+                writer.writerow([f'{customer:05d};"INVOICE ISSUED";"{disp_time(env.now)}"'])
+
+                # Wait some time until customer goes and orders
+                yield env.timeout(random.randint(hours_to_mins(3), days_to_mins(6)))
+
+                if not(in_photographer_working_hours(env.now)):
+                    yield env.process(wait_until_photographer_working_hours(env))
+                    yield env.timeout(random.randint(hours_to_mins(0.5), hours_to_mins(1.5)))
+            else:
+                # Wait between 3 hours after invoice and 1 hour before customer orders
+                yield env.timeout(random.randint(hours_to_mins(3), days_to_mins(4)))
+
+                if not(in_photographer_working_hours(env.now)):
+                    yield env.process(wait_until_photographer_working_hours(env))
+        else:
+            # Wait a random time between 3hours after customer is notified and 1 hour before a reminder is sent
+            
+            # Initial wait
+            yield env.timeout(random.randint(hours_to_mins(3), days_to_mins(24)))
+
+            if not(in_photographer_working_hours(env.now)):
+                yield env.process(wait_until_photographer_working_hours(env))
 
         # Order is now placed   
-        writer.writerow([f"{customer:05d}: ORDER PLACED"])
+        writer.writerow([f'{customer:05d};"ORDER PLACED";"{disp_time(env.now)}"'])
 
         # EDITING STEP
         if generate_outcome(NEEDS_EDITING_INITIALLY) == EDITING_REQUIRED:
-            if generate_outcome(NEEDS_TO_TALK_WITH_TECHNICIAN) == TECHNICIAN_REQUIRED:
-                while True:
-                    writer.writerow([f"{customer:05d}: CUSTOMER ASKED FOR INFORMATION"])
-                    if generate_outcome(NEEDS_ANOTHER_TECHNICIAN_TALK) == TECHNICIAN_NOT_REQUIRED:
-                        break
 
-            writer.writerow([f"{customer:05d}: PHOTOS EDITED"])
+            tech_job_duration = random.randint(15,40)
+
+            with fotof_studio.tech.request() as tech:
+                yield tech
+
+                # If duration won't fit into working hours, delay over to out of hours
+                if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + tech_job_duration - 30)):
+                    yield env.timeout(tech_job_duration + 30)
+                    
+
+                # Delay until start of next working day if out of hours
+                if not(in_tech_working_hours(env.now)):
+                    yield env.process(wait_until_tech_working_hours(env))
+                    
+
+                yield env.timeout(tech_job_duration)
+
+                writer.writerow([f'{customer:05d};"PHOTOS EDITED";"{disp_time(env.now)}"'])   
+
+                if generate_outcome(NEEDS_TO_TALK_WITH_TECHNICIAN) == TECHNICIAN_REQUIRED:
+
+                    while True:
+                        tech_call_duration = random.randint(3,15)
+                         # If duration won't fit into working hours, delay over to out of hours
+                        if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + tech_call_duration - 30)):
+                            yield env.timeout(tech_call_duration + 30)
+                            
+
+                        # Delay until start of next working day if out of hours
+                        if not(in_tech_working_hours(env.now)):
+                            yield env.process(wait_until_tech_working_hours(env))
+                            
+                        yield env.timeout(tech_call_duration)
+
+                        writer.writerow([f'{customer:05d};"CUSTOMER ASKED FOR INFORMATION";"{disp_time(env.now)}"'])   
+
+                        tech_job_duration = random.randint(10,40)
+
+                        # If duration won't fit into working hours, delay over to out of hours
+                        if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + tech_job_duration - 30)):
+                            yield env.timeout(tech_job_duration + 30)
+                            
+
+                        # Delay until start of next working day if out of hours
+                        if not(in_tech_working_hours(env.now)):
+                            yield env.process(wait_until_tech_working_hours(env))
+
+                        yield env.timeout(tech_job_duration)
+
+                        writer.writerow([f'{customer:05d};"PHOTOS EDITED";"{disp_time(env.now)}"'])   
+
+                        if generate_outcome(NEEDS_ANOTHER_TECHNICIAN_TALK) == TECHNICIAN_NOT_REQUIRED:
+                            break
+
 
         # Provide info as to whether photos are printed or not
         printed = (generate_outcome(PHOTOS_GETTING_PRINTED) == GETTING_PRINTED)
@@ -301,17 +327,48 @@ def use_fotof(env, fotof_studio, customer, writer):
 
         # Provide relevant info for printed/digital photos
         if digital:
-            writer.writerow([f"{customer:05d}: PHOTOS UPLOADED TO DROPBOX"])
+            with fotof_studio.tech.request() as tech:
+                yield tech
+                upload_duration = 3
+                # If duration won't fit into working hours, delay over to out of hours
+                if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + upload_duration - 30)):
+                    yield env.timeout(upload_duration + 30)
+                    
+
+                # Delay until start of next working day if out of hours
+                if not(in_tech_working_hours(env.now)):
+                    yield env.process(wait_until_tech_working_hours(env))
+                    
+
+                yield env.timeout(upload_duration)
+
+                writer.writerow([f'{customer:05d};"PHOTOS UPLOADED TO DROPBOX";"{disp_time(env.now)}"'])   
 
         if printed:
-            writer.writerow([f"{customer:05d}: PHOTOS PRINTED"])
+            with fotof_studio.tech.request() as tech:
+                yield tech
+                print_duration = 15
+                # If duration won't fit into working hours, delay over to out of hours
+                if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + print_duration - 30)):
+                    yield env.timeout(print_duration + 30)
+                    
+
+                # Delay until start of next working day if out of hours
+                if not(in_tech_working_hours(env.now)):
+                    yield env.process(wait_until_tech_working_hours(env))
+                    
+
+                yield env.timeout(print_duration)
+            writer.writerow([f'{customer:05d};"PHOTOS PRINTED";"{disp_time(env.now)}"'])   
+
+        yield env.timeout(hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
 
         break
         
     # Invoice step
 
     # Initial invoice issued
-    writer.writerow([f"{customer:05d}: INVOICE ISSUED"])
+    writer.writerow([f'{customer:05d};"INVOICE ISSUED";"{disp_time(env.now)}"']) 
 
     # Reminder step
 
@@ -319,11 +376,13 @@ def use_fotof(env, fotof_studio, customer, writer):
 
     while generate_outcome(INVOICE_REMINDER) == NEEDS_INVOICE_REMINDER:
         if invoice_reminder_count == 5:
-            writer.writerow([f"{customer:05d}: INVOICE REFERRED TO COLLECTIONS"])
+            yield env.timeout(days_to_mins(6) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
+            writer.writerow([f'{customer:05d};"INVOICE REFERRED TO COLLECTIONS";"{disp_time(env.now)}"'])
             return
 
         invoice_reminder_count += 1
-        writer.writerow([f"{customer:05d}: INVOICE REMINDER SENT"])
+        yield env.timeout(days_to_mins(6) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
+        writer.writerow([f'{customer:05d};"INVOICE REMINDER SENT";"{disp_time(env.now)}"'])  
 
     # Actual ordering/payment step
 
@@ -332,32 +391,73 @@ def use_fotof(env, fotof_studio, customer, writer):
     else:
         collect_payment_status = generate_outcome(DIGITAL_OR_FEE_STRAIGHT_TO_UPDATE)
 
+
+    yield env.timeout(random.randint(hours_to_mins(3), days_to_mins(6)))
+
+    if not(in_photographer_working_hours(env.now)):
+        yield env.process(wait_until_photographer_working_hours(env))
+        yield env.timeout(random.randint(0, hours_to_mins(6)))
+
     if collect_payment_status == ORDER_NOT_UPDATED:
-        writer.writerow([f"{customer:05d}: COLLECTED PAYMENT"])
+        writer.writerow([f'{customer:05d};"COLLECTED PAYMENT";"{disp_time(env.now)}"'])  
+        yield env.timeout(random.randint(1,2))
 
     # Order updated step
-    writer.writerow([f"{customer:05d}: ORDER UPDATED"])
+    writer.writerow([f'{customer:05d};"ORDER UPDATED";"{disp_time(env.now)}"'])  
 
     # Dropbox link step
     if digital:
-        writer.writerow([f"{customer:05d}: DROPBOX LINK TO PHOTOS SENT"])
+        with fotof_studio.tech.request() as tech:
+            yield tech
+            upload_duration = random.randint(2,3)
+            # If duration won't fit into working hours, delay over to out of hours
+            if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now + upload_duration - 30)):
+                yield env.timeout(upload_duration + 30)
+                
+
+            # Delay until start of next working day if out of hours
+            if not(in_photographer_working_hours(env.now)):
+                yield env.process(wait_until_photographer_working_hours(env))
+
+            yield env.timeout(upload_duration)
+        writer.writerow([f'{customer:05d};"DROPBOX LINK TO PHOTOS SENT";"{disp_time(env.now)}"'])  
     
     # Printed photos received
     if printed:
         if collect_payment_status == ORDER_UPDATED:
             if generate_outcome(SEND_PRINTOUT_OR_PICKUP) == PRINTOUT_SENT:
-                writer.writerow([f"{customer:05d}: PRINTOUTS SENT"])
+            
+                print_duration = random.randint(8,12)
+
+                if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now + print_duration - 30)):
+                    yield env.timeout(print_duration + 30)
+                
+
+                # Delay until start of next working day if out of hours
+                if not(in_photographer_working_hours(env.now)):
+                    yield env.process(wait_until_photographer_working_hours(env))
+                
+                yield env.timeout(print_duration)
+                writer.writerow([f'{customer:05d};"PRINTOUTS SENT";"{disp_time(env.now)}"'])  
             else:
                 while generate_outcome(PHOTOS_REMINDER_SENT) == PICKUP_REMINDER_SENT:
-                    writer.writerow([f"{customer:05d}: PICKUP REMINDER SENT"])
+                    writer.writerow([f'{customer:05d};"PICKUP REMINDER SENT";"{disp_time(env.now)}"']) 
+                    yield env.timeout(days_to_mins(6) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1))) 
+
+                yield env.timeout(random.randint(hours_to_mins(3), days_to_mins(6)))
+
+                if not(in_photographer_working_hours(env.now)):
+                    yield env.process(wait_until_photographer_working_hours(env))
+                    yield env.timeout(random.randint(0, hours_to_mins(6)))
+
+                
             
     # Close order if customer ended up receiving something
 
     if digital or printed:
-        writer.writerow([f"{customer:05d}: ORDER CLOSED"])
+        yield env.timeout(random.randint(1,2))
+        writer.writerow([f'{customer:05d};"ORDER CLOSED";"{disp_time(env.now)}"'])  
 
-
-    # Invoice stage
 
 
 # Simulate the operation of the entire fotof studio for a list of orders

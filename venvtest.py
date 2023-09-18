@@ -1,12 +1,13 @@
 import simpy
 import random
+import math
 from generate_events import *
 from datetime import datetime, timedelta
 
 import csv
 
 NUM_STUDIOS = 1
-NUM_ORDERS = 3600
+NUM_ORDERS = 3600*NUM_STUDIOS
 
 NUM_TECHS = 2
 
@@ -20,8 +21,8 @@ class Fotof_studio(object):
     """
     def __init__(self, env, num_photographers, num_techs):
         self.env = env 
-        self.photographer = simpy.Resource(env, num_photographers)
-        self.tech = simpy.Resource(env, num_techs)
+        self.photographer = simpy.PriorityResource(env, num_photographers)
+        self.tech = simpy.PriorityResource(env, num_techs)
 
     def take_photos(self, in_studio: bool, customer):
         yield self.env.timeout(random.randint(1,3))
@@ -116,7 +117,7 @@ def in_tech_working_hours(time_mins):
     return True
 
 # Simulate the use of a fotof studio for a single customer
-def use_fotof(env, fotof_studio, customer, writer):
+def use_fotof(env, fotof_studio, customer, writer, obj_writer):
     # Get info about the order 
     is_personal = bool(generate_outcome(PERSONAL_OR_CORPORATE))
     at_studio = bool(get_studio_or_location(is_personal))
@@ -152,11 +153,14 @@ def use_fotof(env, fotof_studio, customer, writer):
             duration = 1 if at_studio else random.randint(2,3)
         else:
             duration = random.randint(2,4)
+
+        
+        job_queue_priority = 10
         
 
         while True:
             # Wait for a photographer and try grab a slot, if not able to, wait until the next day and try again
-            with fotof_studio.photographer.request() as photographer:
+            with fotof_studio.photographer.request(priority =  job_queue_priority) as photographer:
                 yield photographer
                 if (env.now % 60 != 0):
                     yield env.timeout(60 - (env.now % 60))
@@ -172,6 +176,8 @@ def use_fotof(env, fotof_studio, customer, writer):
 
             if not(in_photographer_working_hours(env.now)):
                 yield env.process(wait_until_photographer_working_hours(env))
+
+            job_queue_priority = 0
 
         # Photographer checked in stage (mark back in time when the customer contacted if late so that the photographer resource step works)
 
@@ -460,13 +466,18 @@ def use_fotof(env, fotof_studio, customer, writer):
         yield env.timeout(random.randint(1,2))
         writer.writerow([f'{customer:05d};ORDER CLOSED;{disp_time(env.now)}'])  
 
+def generate_delay_between_customers(index):
+    initial_delay = int(30*(3-math.sin(3*math.pi*index)))
+
+    return random.randint(initial_delay-1, initial_delay+1)
+
 
 
 # Simulate the operation of the entire fotof studio for a list of orders
-def simulate_fotof_studio(env, fotof_studio, orders: list, writer):
-    for customer in orders:
-        yield env.timeout(1)
-        env.process(use_fotof(env, fotof_studio, customer, writer))
+def simulate_fotof_studio(env, fotof_studio, orders: list, writer, obj_writer):
+    for i in range(len(orders)):
+        yield env.timeout(generate_delay_between_customers(i))
+        env.process(use_fotof(env, fotof_studio, orders[i], writer, obj_writer))
 
 def wait_until_photographer_working_hours(env):
     # Keep adding delays until we're within business hours
@@ -511,13 +522,10 @@ def wait_until_tech_working_hours(env):
 
 
 if __name__ == "__main__":
-    # Create environment to be simulated
-    env = simpy.Environment()
+    
 
     # Create the different studios
     fotof_studios = []
-    for i in range(NUM_STUDIOS):
-        fotof_studios.append(Fotof_studio(env, get_num_photographers(), NUM_TECHS))
 
     # Order ids contains the order ids for each studio
     order_ids = [[] for _ in range(NUM_STUDIOS)]
@@ -528,14 +536,21 @@ if __name__ == "__main__":
 
     with open('eventlog.csv', 'w') as file:
         writer = csv.writer(file)
+        with open('object.csv', 'w') as object_file:
+            obj_writer = csv.writer(object_file)
 
-        # Write the first row
-        writer.writerow(['CaseId;EventName;Timestamp'])
+            # Write the first row
+            writer.writerow(['CaseId;EventName;Timestamp'])
 
-        # Simulate the studios
-        for studio_num in range(NUM_STUDIOS):
-            print(f"Starting studio: {studio_num+1}\nNum orders: {len(order_ids[studio_num])}")
-            env.process(simulate_fotof_studio(env, fotof_studios[studio_num], order_ids[studio_num], writer))
-            env.run()
+            # Simulate the studios
+            for studio_num in range(NUM_STUDIOS):
+                # Create environment to be simulated
+                env = simpy.Environment()
+                fotof_studios.append(Fotof_studio(env, get_num_photographers(), NUM_TECHS))
+                print(f"Starting studio: {studio_num+1}\nNum orders: {len(order_ids[studio_num])}")
+                env.process(simulate_fotof_studio(env, fotof_studios[studio_num], order_ids[studio_num], writer, obj_writer))
+                env.run()
+
+            object_file.close()
 
         file.close()

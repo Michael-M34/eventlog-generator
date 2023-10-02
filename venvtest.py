@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 import csv
 
-NUM_STUDIOS = 1
-NUM_ORDERS = 3600*NUM_STUDIOS
+NUM_STUDIOS = 2
+NUM_ORDERS = 1800*NUM_STUDIOS
 
 NUM_TECHS = 2
 
@@ -117,10 +117,12 @@ def in_tech_working_hours(time_mins):
     return True
 
 # Simulate the use of a fotof studio for a single customer
-def use_fotof(env, fotof_studio, customer, writer, obj_writer):
+def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studio_num):
     # Get info about the order 
     is_personal = bool(generate_outcome(PERSONAL_OR_CORPORATE))
+    order_dict["personal_or_corporate"] = "Personal" if is_personal else "Corporate"
     at_studio = bool(get_studio_or_location(is_personal))
+    order_dict["blueprint_or_custom"] = "Blueprint" if at_studio else "Custom Design"
 
     printed = False
     digital = False
@@ -144,7 +146,8 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
                 yield env.timeout(random.randint(3*60*24, 20*60*24))
 
                 writer.writerow([f'{customer:05d};BOOKING CANCELLED;{disp_time(env.now)}'])
-                return
+                obj_writer.writerow([f'{customer:05d};{order_dict["personal_or_corporate"]};{order_dict["blueprint_or_custom"]};{str(order_dict["order_value"])};{studio_num + 1}'])
+                return 
 
         # Wait 3-40 days
         yield env.timeout(60*random.randint(3*24, 40*24))
@@ -166,7 +169,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
                     yield env.timeout(60 - (env.now % 60))
 
                 if in_photographer_working_hours(env.now) and in_photographer_working_hours(env.now + hours_to_mins(duration-1)):
-                    writer.writerow([f'{customer:05d};PHOTOGRAPHER CHECKED IN;{disp_time(env.now)}'])
+                    writer.writerow([f'{customer:05d};APPOINTMENT STARTED;{disp_time(env.now)}'])
                     # print(f'Customer {customer} checked in for a {duration} hour job')
                     yield env.timeout(hours_to_mins(duration))
                     break
@@ -192,6 +195,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
         elif checkin_status == CHECK_IN_NO_SHOW:
             writer.writerow([f'{customer:05d};CONTACTED CUSTOMER;{disp_time(env.now - hours_to_mins(duration) + random.randint(5, 15))}'])
             
+            order_dict["order_value"] += (0 if at_studio else 50)
             if generate_outcome(NO_SHOW_RESCHEDULED) == RESCHEDULED:
                 # Delay until midnight then wait until between 8:30 and 10:30am
                 yield env.timeout(hours_to_mins(24 + 8.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(2)))
@@ -204,7 +208,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
 
         # INITIAL PHOTO EDIT
 
-        tech_job_duration = random.randint(15,30) if at_studio else random.randint(25,60)
+        tech_job_duration = random.randint(15, 30) if at_studio else random.randint(60,180)
 
         with fotof_studio.tech.request() as tech:
             yield tech
@@ -222,12 +226,12 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
             yield env.timeout(tech_job_duration)
 
         # Photos are uploaded
-        writer.writerow([f'{customer:05d};PHOTO_UPLOADED;{disp_time(env.now)}'])
+        writer.writerow([f'{customer:05d};DESIGNS UPLOADED;{disp_time(env.now)}'])
 
         yield env.timeout(random.randint(1,3))
 
         # Customer is notified of photos
-        writer.writerow([f'{customer:05d};CUSTOMER NOTIFIED OF GALLERY;{disp_time(env.now)}'])
+        writer.writerow([f'{customer:05d};CUSTOMER NOTIFIED OF PORTFOLIO;{disp_time(env.now)}'])
 
         # Reminder step
 
@@ -235,7 +239,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
 
             yield env.timeout(days_to_mins(24) + hours_to_mins(24 + 8.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
 
-            writer.writerow([f'{customer:05d};CUSTOMER REMINDED OF GALLERY;{disp_time(env.now)}'])
+            writer.writerow([f'{customer:05d};CUSTOMER REMINDED OF PORTFOLIO;{disp_time(env.now)}'])
 
             after_reminder_status = generate_outcome(CUSTOMER_AFTER_REMINDER)
             
@@ -243,6 +247,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
                 yield env.timeout(days_to_mins(4) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
                 
                 if after_reminder_status == CUSTOMER_INVOICED:
+                    order_dict["order_value"] += (100 if at_studio else 300)
                     break
 
                 writer.writerow([f'{customer:05d};INVOICE ISSUED;{disp_time(env.now)}'])
@@ -291,7 +296,8 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
 
                 yield env.timeout(tech_job_duration)
 
-                writer.writerow([f'{customer:05d};PHOTOS EDITED;{disp_time(env.now)}'])   
+                writer.writerow([f'{customer:05d};SPECIAL REQUEST PROCESSED;{disp_time(env.now)}']) 
+                order_dict["order_value"] +=  (200 if at_studio else 500)
 
                 if generate_outcome(NEEDS_TO_TALK_WITH_TECHNICIAN) == TECHNICIAN_REQUIRED:
 
@@ -323,15 +329,17 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
 
                         yield env.timeout(tech_job_duration)
 
-                        writer.writerow([f'{customer:05d};PHOTOS EDITED;{disp_time(env.now)}'])   
+                        writer.writerow([f'{customer:05d};SPECIAL REQUEST PROCESSED;{disp_time(env.now)}'])  
+                        order_dict["order_value"] +=  (200 if at_studio else 500) 
 
                         if generate_outcome(NEEDS_ANOTHER_TECHNICIAN_TALK) == TECHNICIAN_NOT_REQUIRED:
                             break
 
 
+        printed_digital_both = generate_outcome(PHOTOS_PRINTED_DIGITAL_BOTH)
         # Provide info as to whether photos are printed or not
-        printed = (generate_outcome(PHOTOS_GETTING_PRINTED) == GETTING_PRINTED)
-        digital = (generate_outcome(PHOTOS_GETTING_DIGITAL) == GETTING_DIGITAL)
+        printed = (printed_digital_both == PHOTOS_PRINTED or printed_digital_both == BOTH_PRINTED_DIGITAL)
+        digital = (printed_digital_both == BOTH_PRINTED_DIGITAL or printed_digital_both == JUST_DIGITAL)
 
         # Provide relevant info for printed/digital photos
         if digital:
@@ -350,26 +358,29 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
 
                 yield env.timeout(upload_duration)
 
-                writer.writerow([f'{customer:05d};PHOTOS UPLOADED TO DROPBOX;{disp_time(env.now)}'])   
+                writer.writerow([f'{customer:05d};DESIGNS LOADED TO GOOGLE DRIVE;{disp_time(env.now)}'])   
 
         if printed:
-            with fotof_studio.tech.request() as tech:
-                yield tech
-                print_duration = 15
-                # If duration won't fit into working hours, delay over to out of hours
-                if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + print_duration - 30)):
-                    yield env.timeout(print_duration + 30)
-                    
+            print_duration = random.randint(hours_to_mins(2), hours_to_mins(6))
+            # If duration won't fit into working hours, delay over to out of hours
+            if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + print_duration - 30)):
+                yield env.timeout(print_duration + 30)
+                
 
-                # Delay until start of next working day if out of hours
-                if not(in_tech_working_hours(env.now)):
-                    yield env.process(wait_until_tech_working_hours(env))
-                    
+            # Delay until start of next working day if out of hours
+            if not(in_tech_working_hours(env.now)):
+                yield env.process(wait_until_tech_working_hours(env))
+                
 
-                yield env.timeout(print_duration)
-            writer.writerow([f'{customer:05d};PHOTOS PRINTED;{disp_time(env.now)}'])   
+            yield env.timeout(print_duration)
+            writer.writerow([f'{customer:05d};MATERIALS PRINTED;{disp_time(env.now)}'])   
 
         yield env.timeout(hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
+
+        if is_personal:
+            order_dict["order_value"] += (random.randint(200,1000) if at_studio else random.randint(800,5000))
+        else:
+            order_dict["order_value"] += (random.randint(500,1500) if at_studio else random.randint(800,5000))
 
         break
         
@@ -386,7 +397,8 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
         if invoice_reminder_count == 5:
             yield env.timeout(days_to_mins(6) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
             writer.writerow([f'{customer:05d};INVOICE REFERRED TO COLLECTIONS;{disp_time(env.now)}'])
-            return
+            obj_writer.writerow([f'{customer:05d};{order_dict["personal_or_corporate"]};{order_dict["blueprint_or_custom"]};{str(order_dict["order_value"])};{studio_num + 1}'])
+            return 
 
         invoice_reminder_count += 1
         yield env.timeout(days_to_mins(6) + hours_to_mins(24 + 9.5)-(env.now % hours_to_mins(24)) + random.randint(0, hours_to_mins(1)))
@@ -428,7 +440,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
                 yield env.process(wait_until_photographer_working_hours(env))
 
             yield env.timeout(upload_duration)
-        writer.writerow([f'{customer:05d};DROPBOX LINK TO PHOTOS SENT;{disp_time(env.now)}'])  
+        writer.writerow([f'{customer:05d};GOOGLE DRIVE SENT;{disp_time(env.now)}'])  
     
     # Printed photos received
     if printed:
@@ -446,7 +458,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
                     yield env.process(wait_until_photographer_working_hours(env))
                 
                 yield env.timeout(print_duration)
-                writer.writerow([f'{customer:05d};PRINTOUTS SENT;{disp_time(env.now)}'])  
+                writer.writerow([f'{customer:05d};PHYSICAL MATERIALS SENT;{disp_time(env.now)}'])  
             else:
                 while generate_outcome(PHOTOS_REMINDER_SENT) == PICKUP_REMINDER_SENT:
                     writer.writerow([f'{customer:05d};PICKUP REMINDER SENT;{disp_time(env.now)}']) 
@@ -465,19 +477,31 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer):
     if digital or printed:
         yield env.timeout(random.randint(1,2))
         writer.writerow([f'{customer:05d};ORDER CLOSED;{disp_time(env.now)}'])  
+    
+    obj_writer.writerow([f'{customer:05d};{order_dict["personal_or_corporate"]};{order_dict["blueprint_or_custom"]};{str(order_dict["order_value"])};{studio_num + 1}'])
+    return 
 
-def generate_delay_between_customers(index):
-    initial_delay = int(30*(3-math.sin(3*math.pi*index)))
+def generate_delay_between_customers(index, phase):
+    initial_delay = int(30*(3-math.sin(2*math.pi*index/3600 + phase)))
 
-    return random.randint(initial_delay-1, initial_delay+1)
+    return random.randint(initial_delay-20, initial_delay+20)
 
-
+# def use_env_process(env, func, arg1, arg2, arg3, arg4, arg5, arg6):
+#     result = use_fotof(arg1, arg2, arg3, arg4, arg5, arg6)
+#     env.process()
 
 # Simulate the operation of the entire fotof studio for a list of orders
-def simulate_fotof_studio(env, fotof_studio, orders: list, writer, obj_writer):
+def simulate_fotof_studio(env, fotof_studio, orders: list, writer, obj_writer, studio_num):
+    phase = random.random() * 2*math.pi
     for i in range(len(orders)):
-        yield env.timeout(generate_delay_between_customers(i))
-        env.process(use_fotof(env, fotof_studio, orders[i], writer, obj_writer))
+        yield env.timeout(generate_delay_between_customers(i, phase))
+        order_dict = {
+            "personal_or_corporate": "",
+            "blueprint_or_custom": "",
+            "order_value": 0,
+        }
+        env.process(use_fotof(env, fotof_studio, orders[i], writer, obj_writer, order_dict, studio_num))
+        
 
 def wait_until_photographer_working_hours(env):
     # Keep adding delays until we're within business hours
@@ -541,6 +565,7 @@ if __name__ == "__main__":
 
             # Write the first row
             writer.writerow(['CaseId;EventName;Timestamp'])
+            obj_writer.writerow(['CaseId;Personal/Corporate;Blueprint/Custom design;Order value;Store'])
 
             # Simulate the studios
             for studio_num in range(NUM_STUDIOS):
@@ -548,7 +573,7 @@ if __name__ == "__main__":
                 env = simpy.Environment()
                 fotof_studios.append(Fotof_studio(env, get_num_photographers(), NUM_TECHS))
                 print(f"Starting studio: {studio_num+1}\nNum orders: {len(order_ids[studio_num])}")
-                env.process(simulate_fotof_studio(env, fotof_studios[studio_num], order_ids[studio_num], writer, obj_writer))
+                env.process(simulate_fotof_studio(env, fotof_studios[studio_num], order_ids[studio_num], writer, obj_writer, studio_num))
                 env.run()
 
             object_file.close()

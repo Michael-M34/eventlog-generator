@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 import csv
 
-NUM_STUDIOS = 2
-NUM_ORDERS = 1800*NUM_STUDIOS
+NUM_STUDIOS = 1
+NUM_ORDERS = 3600*NUM_STUDIOS
 
 NUM_TECHS = 2
 
@@ -150,12 +150,12 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
                 return 
 
         # Wait 3-40 days
-        yield env.timeout(60*random.randint(3*24, 40*24))
+        yield env.timeout(60*random.randint(3*24, 15*24))
 
         if is_personal:
-            duration = 1 if at_studio else random.randint(2,3)
+            duration = 1 if at_studio else random.randint(1,2)
         else:
-            duration = random.randint(2,4)
+            duration = random.randint(1,3)
 
         
         job_queue_priority = 10
@@ -163,7 +163,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
 
         while True:
             # Wait for a photographer and try grab a slot, if not able to, wait until the next day and try again
-            with fotof_studio.photographer.request(priority =  job_queue_priority) as photographer:
+            with fotof_studio.photographer.request(priority = job_queue_priority) as photographer:
                 yield photographer
                 if (env.now % 60 != 0):
                     yield env.timeout(60 - (env.now % 60))
@@ -204,11 +204,24 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
                 break
 
         # Since job would've finished by 5pm, wait until photos get sent to editor at 5pm at the end of the day
-        yield env.timeout(hours_to_mins(17) - (env.now % hours_to_mins(24)))
+        business_hour_delay = hours_to_mins(2.5)
+
+        if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now + business_hour_delay)):
+                first_delay = hours_to_mins(16.5) - (env.now % hours_to_mins(24))
+                yield env.timeout(first_delay)
+                business_hour_delay -= first_delay
+                
+        # Delay until start of next working day if out of hours
+        if not(in_photographer_working_hours(env.now)):
+            yield env.process(wait_until_photographer_working_hours(env))
+
+        yield env.timeout(business_hour_delay)
+
+        writer.writerow([f'{customer:05d};DESIGNS UPLOADED;{disp_time(env.now)}'])
 
         # INITIAL PHOTO EDIT
 
-        tech_job_duration = random.randint(15, 30) if at_studio else random.randint(60,180)
+        tech_job_duration = random.randint(30, 50) if at_studio else random.randint(45,65)
 
         with fotof_studio.tech.request() as tech:
             yield tech
@@ -226,7 +239,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
             yield env.timeout(tech_job_duration)
 
         # Photos are uploaded
-        writer.writerow([f'{customer:05d};DESIGNS UPLOADED;{disp_time(env.now)}'])
+        
 
         yield env.timeout(random.randint(1,3))
 
@@ -482,7 +495,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
     return 
 
 def generate_delay_between_customers(index, phase):
-    initial_delay = int(30*(3-math.sin(2*math.pi*index/3600 + phase)))
+    initial_delay = int(30*(4.25-math.sin(2*math.pi*index/3600 + phase)))
 
     return random.randint(initial_delay-20, initial_delay+20)
 

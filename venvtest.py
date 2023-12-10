@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import csv
 
-NUM_STUDIOS = 1
+NUM_STUDIOS = 25
 NUM_ORDERS = 3600*NUM_STUDIOS
 
 NUM_TECHS = 2
@@ -153,9 +153,9 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
         yield env.timeout(60*random.randint(3*24, 15*24))
 
         if is_personal:
-            duration = 1 if at_studio else random.randint(1,2)
+            duration = 30
         else:
-            duration = random.randint(1,3)
+            duration = 60
 
         
         job_queue_priority = 10
@@ -163,19 +163,19 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
 
         while True:
             # Wait for a photographer and try grab a slot, if not able to, wait until the next day and try again
-            with fotof_studio.photographer.request(priority = job_queue_priority) as photographer:
-                yield photographer
-                if (env.now % 60 != 0):
-                    yield env.timeout(60 - (env.now % 60))
+            # with fotof_studio.photographer.request(priority = job_queue_priority) as photographer:
+                # yield photographer
+            if (env.now % 30 != 0):
+                yield env.timeout(30 - (env.now % 30))
 
-                if in_photographer_working_hours(env.now) and in_photographer_working_hours(env.now + hours_to_mins(duration-1)):
-                    writer.writerow([f'{customer:05d};APPOINTMENT STARTED;{disp_time(env.now)}'])
-                    # print(f'Customer {customer} checked in for a {duration} hour job')
-                    yield env.timeout(hours_to_mins(duration))
-                    break
+            if in_photographer_working_hours(env.now) and in_photographer_working_hours(env.now + duration - 60):
+                writer.writerow([f'{customer:05d};APPOINTMENT STARTED;{disp_time(env.now)}'])
+                # print(f'Customer {customer} checked in for a {duration} hour job')
+                yield env.timeout(duration)
+                break
 
-            if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+hours_to_mins(duration))):
-                    yield env.timeout(hours_to_mins(duration+1))
+            if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now+duration - 60)):
+                    yield env.timeout(duration + 60)
 
             if not(in_photographer_working_hours(env.now)):
                 yield env.process(wait_until_photographer_working_hours(env))
@@ -190,10 +190,10 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
             checkin_status = generate_outcome(LOCATION_CHECK_IN)
 
         if checkin_status == CHECK_IN_LATE:
-            writer.writerow([f'{customer:05d};CONTACTED CUSTOMER;{disp_time(env.now - hours_to_mins(duration) + random.randint(5, 15))}'])
+            writer.writerow([f'{customer:05d};CONTACTED CUSTOMER;{disp_time(env.now - duration + random.randint(5, 15))}'])
         
         elif checkin_status == CHECK_IN_NO_SHOW:
-            writer.writerow([f'{customer:05d};CONTACTED CUSTOMER;{disp_time(env.now - hours_to_mins(duration) + random.randint(5, 15))}'])
+            writer.writerow([f'{customer:05d};CONTACTED CUSTOMER;{disp_time(env.now - duration + random.randint(5, 15))}'])
             
             order_dict["order_value"] += (0 if at_studio else 50)
             if generate_outcome(NO_SHOW_RESCHEDULED) == RESCHEDULED:
@@ -207,7 +207,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
         business_hour_delay = hours_to_mins(2.5)
 
         if in_photographer_working_hours(env.now) and not(in_photographer_working_hours(env.now + business_hour_delay)):
-                first_delay = hours_to_mins(16.5) - (env.now % hours_to_mins(24))
+                first_delay = hours_to_mins(16) - (env.now % hours_to_mins(24))
                 yield env.timeout(first_delay)
                 business_hour_delay -= first_delay
                 
@@ -292,7 +292,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
         # EDITING STEP
         if generate_outcome(NEEDS_EDITING_INITIALLY) == EDITING_REQUIRED:
 
-            tech_job_duration = random.randint(15,40)
+            tech_job_duration = random.randint(30,60)
 
             with fotof_studio.tech.request() as tech:
                 yield tech
@@ -329,7 +329,7 @@ def use_fotof(env, fotof_studio, customer, writer, obj_writer, order_dict, studi
 
                         writer.writerow([f'{customer:05d};CUSTOMER ASKED FOR INFORMATION;{disp_time(env.now)}'])   
 
-                        tech_job_duration = random.randint(10,40)
+                        tech_job_duration = random.randint(60,120)
 
                         # If duration won't fit into working hours, delay over to out of hours
                         if in_tech_working_hours(env.now) and not(in_tech_working_hours(env.now + tech_job_duration - 30)):
@@ -505,7 +505,7 @@ def generate_delay_between_customers(index, phase):
 
 # Simulate the operation of the entire fotof studio for a list of orders
 def simulate_fotof_studio(env, fotof_studio, orders: list, writer, obj_writer, studio_num):
-    phase = random.random() * 2*math.pi
+    phase = random.random() * math.pi
     for i in range(len(orders)):
         yield env.timeout(generate_delay_between_customers(i, phase))
         order_dict = {
@@ -518,7 +518,7 @@ def simulate_fotof_studio(env, fotof_studio, orders: list, writer, obj_writer, s
 
 def wait_until_photographer_working_hours(env):
     # Keep adding delays until we're within business hours
-    while (in_photographer_working_hours(env.now) == False) or ((env.now % 60) != 0):
+    while (in_photographer_working_hours(env.now) == False) or ((env.now % 30) != 0):
         # Bring timeframe down to the week scale so we can run a bunch of checks
         time_mins = env.now % days_to_mins(7)
         # print("Customer ", customer,  " Can't get out at time ", disp_time(env.now), " ", print_day_of_week(time_mins))
@@ -537,7 +537,7 @@ def wait_until_photographer_working_hours(env):
 
         # The only other option is that we're not exactly on the hour, hence wait until the next hour
         else:
-            yield env.timeout(hours_to_mins(1) - (time_mins % 60))
+            yield env.timeout(hours_to_mins(1) - (time_mins % 30))
 
 def wait_until_tech_working_hours(env):
     # Keep adding delays until we're within business hours

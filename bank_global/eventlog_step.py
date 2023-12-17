@@ -30,7 +30,7 @@ class EventlogStep():
         for step in next_steps_list:
             self.next_steps.append(step)
 
-    def disp_time(env_time_mins):
+    def disp_time(self, env_time_mins):
         """
         Returns the env time in string format to be printed to the eventlog
         """
@@ -42,7 +42,7 @@ class EventlogStep():
 
         
     def complete_step(self, customer_id, env, writer) -> int:
-        print(f"Doing {self.step_name}")
+        print(f"Doing {self.step_name} at {env.now}")
         yield env.timeout(60)
         writer.writerow([f'{customer_id:05d};{self.step_name};{self.disp_time(env.now)}'])
 

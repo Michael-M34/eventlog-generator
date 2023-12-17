@@ -3,8 +3,7 @@ import random
 import simpy
 
 if __name__ == "__main__":
-    env = simpy.Environment()
-    bank_global_env = EventlogEnvironment(env)
+    bank_global_env = EventlogEnvironment()
 
     bank_global_env.add_step("Application Received")
     bank_global_env.add_step("Application submitted to sales manager")
@@ -52,7 +51,6 @@ if __name__ == "__main__":
     bank_global_env.create_next_steps("Credit card activated", [("Application archived",1)])
 
 
-    for i in range(1000):
-        env.process(bank_global_env.complete_run(i, random.choice(["Application Received", "Customer contacted"])))
-
-    env.run()
+    orders = [i + 1 for i in range(1000)]
+    bank_global_env.complete_orders(orders, 60)
+    print("DONE IN MAIN")

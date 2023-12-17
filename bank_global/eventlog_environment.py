@@ -1,6 +1,7 @@
 from eventlog_step import EventlogStep
 import csv
 import simpy
+import random
 
 
 class EventlogEnvironment:
@@ -8,13 +9,11 @@ class EventlogEnvironment:
     num_steps: int
     csv_writer: csv.writer
 
-    def __init__(self, env, eventlog_filename="eventlog.csv"):
+    def __init__(self, eventlog_filename="eventlog.csv"):
         self.steps = []
         self.num_steps = 0
         self.file = open(eventlog_filename, 'w')
         self.csv_writer = csv.writer(self.file)
-
-        self.env = env
 
         # Write header line here
         self.csv_writer.writerow(['CaseId;EventName;Timestamp'])
@@ -66,10 +65,20 @@ class EventlogEnvironment:
         step = self.steps[self.get_step_id_from_name(source_step)]
 
         step.add_next_steps([(self.get_step_id_from_name(dest_step[0]), dest_step[1]) for dest_step in dest_steps])
-        # print("Added next steps for ", source_step, " with id " , self.get_step_id_from_name(source_step), ": ", [x[0] for x in dest_steps])
 
 
-    def complete_run(self, user_id: int, entry_point: str, wait = 60):
+
+    def complete_orders(self, customer_ids: list, wait_between_orders: int):
+        print("Starting orders")
+        self.env = simpy.Environment()
+        for customer_id in customer_ids:
+            self.env.process(self.complete_run(customer_id, random.choice(["Application Received", "Customer contacted"])))
+        
+        self.env.run()
+
+
+
+    def complete_run(self, user_id: int, entry_point: str):
         """
         Complete a process run-through for a user
 
@@ -77,19 +86,17 @@ class EventlogEnvironment:
         user_id (int): User's id
         entry_point (str): Name of the first step user will complete
         """
-        yield self.env.timeout(wait)
 
         step_id = self.get_step_id_from_name(entry_point)
 
         while (step_id != -1):
             print(user_id, ": ", end="")
-            step_id = self.steps[step_id].complete_step(user_id, self.env, self.csv_writer)
-            # print("New step id is ", step_id)
+            step_id = yield self.env.process(self.steps[step_id].complete_step(user_id, self.env, self.csv_writer))
+            # step_id = step_event_process.value
 
     def __del__(self):
         print()
         print("Finished generation: Closing now")
-        # self.file.close()
 
 
 

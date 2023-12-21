@@ -53,4 +53,3 @@ if __name__ == "__main__":
 
     orders = [i + 1 for i in range(1000)]
     bank_global_env.complete_orders(orders, 60)
-    print("DONE IN MAIN")

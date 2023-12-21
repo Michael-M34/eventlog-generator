@@ -92,7 +92,6 @@ class EventlogEnvironment:
         while (step_id != -1):
             print(user_id, ": ", end="")
             step_id = yield self.env.process(self.steps[step_id].complete_step(user_id, self.env, self.csv_writer))
-            # step_id = step_event_process.value
 
     def __del__(self):
         print()

@@ -58,4 +58,12 @@ class EventlogResource:
             else:
                 yield env.timeout(self.hours_to_mins(1) - (time_mins % self.minute_interval))
 
+
+    def complete_job(self, env, job_time_mins=None):
+        if job_time_mins == None:
+            job_time_mins = self.minute_interval
+
+        
+
+
     

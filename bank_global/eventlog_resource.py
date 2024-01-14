@@ -1,16 +1,16 @@
 import simpy
+from datetime import datetime, timedelta
 
 class EventlogResource:
 
-    def __init__(self, num_resources: int, env, start_hour: int, end_hour: int, steps: list, minute_interval:int=60):
-        self.resouce = simpy.Resource(env, num_resources)
+    def __init__(self, num_resources: int, env, start_hour: int, end_hour: int, minute_interval:int=60):
+        self.resource = simpy.PriorityResource(env, num_resources)
         self.start_hour = start_hour
         self.end_hour = end_hour
-        self.associated_steps = steps
         self.minute_interval = minute_interval
 
-    def is_resource_for_step(self, step) -> bool:
-        return step in self.associated_steps
+    # def is_resource_for_step(self, step) -> bool:
+    #     return step in self.associated_steps
     
     def hours_to_mins(self, time):
         return 60*time
@@ -59,9 +59,44 @@ class EventlogResource:
                 yield env.timeout(self.hours_to_mins(1) - (time_mins % self.minute_interval))
 
 
+    def disp_time(self, env_time_mins):
+        """
+        Returns the env time in string format to be printed to the eventlog
+        """
+        time = datetime(2018, 1, 1, 0, 0, 0, 0)
+
+        time += timedelta(seconds=(env_time_mins*60))
+
+        return time.strftime("%Y-%m-%dT%H:%M:%S")
+
     def complete_job(self, env, job_time_mins=None):
         if job_time_mins == None:
             job_time_mins = self.minute_interval
+
+        job_queue_priority = 10
+
+        print("Starting job")
+        
+
+        while True:
+            # Wait for a photographer and try grab a slot, if not able to, wait until the next day and try again
+            with self.resource.request(priority = job_queue_priority) as resource:
+                yield resource
+
+                if self.in_resource_working_hours(env.now) and self.in_resource_working_hours(env.now + job_time_mins):
+                    print(f'Starting job at time at {self.disp_time(env.now)}')
+                    yield env.timeout(job_time_mins)
+                    break
+
+            if self.in_resource_working_hours(env.now) and not(self.in_resource_working_hours(env.now+job_time_mins)):
+                    yield env.timeout(job_time_mins + 60)
+
+            if not(self.in_resource_working_hours(env.now)):
+                yield env.process(self.wait_until_resouce_working_hours(env))
+
+            job_queue_priority = 0
+
+        print(f'Finishing job at time at {self.disp_time(env.now)}')
 
         
 

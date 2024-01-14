@@ -50,6 +50,8 @@ if __name__ == "__main__":
     bank_global_env.create_next_steps("Remaining application forwarded", [("Credit card activated",1)])
     bank_global_env.create_next_steps("Credit card activated", [("Application archived",1)])
 
+    bank_global_env.add_eventlog_resource(1, 9, 17, ["Application Received"], 60)
 
-    orders = [i + 1 for i in range(1000)]
+
+    orders = [i + 1 for i in range(100)]
     bank_global_env.complete_orders(orders, 60)

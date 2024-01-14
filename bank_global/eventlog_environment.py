@@ -1,4 +1,5 @@
 from eventlog_step import EventlogStep
+from eventlog_resource import EventlogResource
 import csv
 import simpy
 import random
@@ -14,6 +15,8 @@ class EventlogEnvironment:
         self.num_steps = 0
         self.file = open(eventlog_filename, 'w')
         self.csv_writer = csv.writer(self.file)
+        self.resource_infos = []
+        self.resources = []
 
         # Write header line here
         self.csv_writer.writerow(['CaseId;EventName;Timestamp'])
@@ -66,11 +69,29 @@ class EventlogEnvironment:
 
         step.add_next_steps([(self.get_step_id_from_name(dest_step[0]), dest_step[1]) for dest_step in dest_steps])
 
+    def add_eventlog_resource(self, num_resources, start_hour, end_hour, associated_steps: list, minute_interval):
+        self.resource_infos.append({"num_resources": num_resources, 
+                               "start_hour": start_hour, 
+                               "end_hour": end_hour,
+                               "associated_steps": associated_steps,
+                               "minute_interval": minute_interval})
+
+
 
 
     def complete_orders(self, customer_ids: list, wait_between_orders: int):
         print("Starting orders")
         self.env = simpy.Environment()
+        # Create the eventlog resources and add them to each declared step
+        for resource_info in self.resource_infos:
+            new_resource = EventlogResource(resource_info["num_resources"], self.env, resource_info["start_hour"], 
+                                            resource_info["end_hour"], resource_info["minute_interval"])
+            for step in resource_info["associated_steps"]:
+                step = self.steps[self.get_step_id_from_name(step)]
+                step.add_resource_to_step(new_resource)
+            
+
+        # Complete the orders for each customer
         for customer_id in customer_ids:
             self.env.process(self.complete_run(customer_id, random.choice(["Application Received", "Customer contacted"])))
         

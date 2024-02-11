@@ -30,7 +30,8 @@ if __name__ == "__main__":
     bank_global_env.add_step("Credit card activated")
     bank_global_env.add_step("Application archived")
 
-    bank_global_env.create_next_steps("Application Received", [("Application submitted to sales manager",0.5),("Application sent",0.5)])
+    # bank_global_env.create_next_steps("Application Received", )
+    bank_global_env.add_till_next_day_delay("Application Received", [("Application submitted to sales manager",0.5),("Application sent",0.5)], 9, 17)
     bank_global_env.create_next_steps("Application submitted to sales manager", [("Application scrutinised",1)])
     bank_global_env.create_next_steps("Application scrutinised", [("Application returned",0.5),("Application sent",0.5)])
     bank_global_env.create_next_steps("Customer contacted", [("Collection notified of application",1)])
@@ -53,5 +54,5 @@ if __name__ == "__main__":
     bank_global_env.add_eventlog_resource(1, 9, 17, ["Application Received"], 60)
 
 
-    orders = [i + 1 for i in range(100)]
+    orders = [i + 1 for i in range(1)]
     bank_global_env.complete_orders(orders, 60)

@@ -8,12 +8,13 @@ class EventlogStep():
     step_name: str
     next_steps: list
     
-    def __init__(self, step_id: int, step_name: str):
+    def __init__(self, step_id: int, step_name: str, time_length: int):
         print("Creating step ", step_name, " with id ", step_id)
         self.step_name = step_name
         self.step_id = step_id
         self.next_steps = []
         self.resource = None
+        self.time_length = time_length
 
     def get_step_name(self) -> str:
         return self.step_name
@@ -49,9 +50,9 @@ class EventlogStep():
         print(f"Doing {self.step_name} at {env.now}")
 
         if self.resource != None: 
-            yield env.process(self.resource.complete_job(env, 60))
+            yield env.process(self.resource.complete_job(env, self.time_length))
         else:
-            yield env.timeout(60)
+            yield env.timeout(self.time_length)
         writer.writerow([f'{customer_id:05d};{self.step_name};{self.disp_time(env.now)}'])
 
         # print("Next possible steps are: ", [x[0] for x in self.next_steps])

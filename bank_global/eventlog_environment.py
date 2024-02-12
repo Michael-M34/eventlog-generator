@@ -40,7 +40,7 @@ class EventlogEnvironment:
         return -1
 
 
-    def add_step(self, step_name: str):
+    def add_step(self, step_name: str, time_length: int):
         """
         Add a certain step to the list of possible steps to be executed
 
@@ -50,7 +50,7 @@ class EventlogEnvironment:
         Returns:
         None
         """
-        self.steps.append(EventlogStep(self.num_steps, step_name))
+        self.steps.append(EventlogStep(self.num_steps, step_name, time_length))
         self.num_steps += 1
 
     def create_next_steps(self, source_step: str, dest_steps: list):

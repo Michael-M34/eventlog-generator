@@ -5,7 +5,7 @@ import simpy
 class TillNextDayDelay(EventlogStep):
 
     def __init__(self, step_id: int, start_hour: int, end_hour: int):
-        print("Creating step delay with id ", step_id)
+        print("Creating next day delay with id ", step_id)
         self.step_id = step_id
         self.next_steps = []
         self.start_hour = start_hour

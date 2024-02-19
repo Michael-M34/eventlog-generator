@@ -1,6 +1,7 @@
 from eventlog_step import EventlogStep
 from eventlog_resource import EventlogResource
 from evennt_log_tillnextday_delay import TillNextDayDelay
+from eventlog_timedelay import EventlogDelay
 import csv
 import simpy
 import random
@@ -77,9 +78,9 @@ class EventlogEnvironment:
                                "associated_steps": associated_steps,
                                "minute_interval": minute_interval})
         
-    def add_till_next_day_delay(self, source_step: str, dest_steps: list, start_hour: int, end_hour: int):
+    def add_till_next_day_delay(self, step_name: str, source_step: str, dest_steps: list, start_hour: int, end_hour: int):
         step = self.steps[self.get_step_id_from_name(source_step)]
-        new_step = TillNextDayDelay(self.num_steps, start_hour, end_hour)
+        new_step = TillNextDayDelay(self.num_steps, step_name, start_hour, end_hour)
         self.steps.append(new_step)
         self.num_steps += 1
 
@@ -87,7 +88,15 @@ class EventlogEnvironment:
         new_step.add_next_steps([(self.get_step_id_from_name(dest_step[0]), dest_step[1]) for dest_step in dest_steps])
 
 
+    def add_time_delay(self, delay_name: str, source_step: str, dest_steps: list, time_delay: int):
+        step = self.steps[self.get_step_id_from_name(source_step)]
 
+        new_step = EventlogDelay(self.num_steps, delay_name, time_delay)
+        self.steps.append(new_step)
+        self.num_steps += 1
+
+        step.add_next_steps([(new_step.get_step_id(), 1)])
+        new_step.add_next_steps([(self.get_step_id_from_name(dest_step[0]), dest_step[1]) for dest_step in dest_steps])
 
 
     def complete_orders(self, customer_ids: list, wait_between_orders: int):

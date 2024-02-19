@@ -28,8 +28,6 @@ class EventlogDelay(EventlogStep):
         
         yield env.timeout(self.time_length)
 
-        # print("Next possible steps are: ", [x[0] for x in self.next_steps])
-
         if len(self.next_steps) == 0:
             return -1
         

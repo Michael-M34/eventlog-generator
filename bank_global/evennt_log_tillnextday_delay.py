@@ -4,12 +4,13 @@ import simpy
 
 class TillNextDayDelay(EventlogStep):
 
-    def __init__(self, step_id: int, start_hour: int, end_hour: int):
+    def __init__(self, step_id: int, step_name: str, start_hour: int, end_hour: int):
         print("Creating next day delay with id ", step_id)
         self.step_id = step_id
         self.next_steps = []
         self.start_hour = start_hour
         self.end_hour = end_hour
+        self.step_name = step_name
 
     def hours_to_mins(self, time):
         return 60*time

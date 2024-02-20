@@ -2,6 +2,7 @@ from eventlog_step import EventlogStep
 from eventlog_resource import EventlogResource
 from evennt_log_tillnextday_delay import TillNextDayDelay
 from eventlog_timedelay import EventlogDelay
+from event_generator import generate_event
 import csv
 import simpy
 import random
@@ -99,7 +100,7 @@ class EventlogEnvironment:
         new_step.add_next_steps([(self.get_step_id_from_name(dest_step[0]), dest_step[1]) for dest_step in dest_steps])
 
 
-    def complete_orders(self, customer_ids: list, wait_between_orders: int):
+    def complete_orders(self, customer_ids: list, wait_between_orders: int, starting_points: list):
         print("Starting orders")
         self.env = simpy.Environment()
         # Create the eventlog resources and add them to each declared step
@@ -113,7 +114,8 @@ class EventlogEnvironment:
 
         # Complete the orders for each customer
         for customer_id in customer_ids:
-            self.env.process(self.complete_run(customer_id, random.choice(["Application Received", "Customer contacted"])))
+            self.env.process(self.complete_run(customer_id, generate_event(starting_points)))
+            # self.env.timeout(wait_between_orders)
         
         self.env.run()
 

@@ -86,5 +86,5 @@ if __name__ == "__main__":
     bank_global_env.add_eventlog_resource(7, 9, 17, ["Customer details inputted", "Pre-screening performed", "CPV report received and attached", "Credit card activated"], 60)
 
 
-    orders = [i + 1 for i in range(100)]
-    bank_global_env.complete_orders(orders, 60, [("Application Received", 0.8), ("Customer contacted", 0.2)])
+    orders = [i + 1 for i in range(int(3*3500/2))]
+    bank_global_env.complete_orders(orders, 13*2, [("Application Received", 0.8), ("Customer contacted", 0.2)])

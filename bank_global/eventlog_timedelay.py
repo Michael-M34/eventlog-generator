@@ -23,7 +23,7 @@ class EventlogDelay(EventlogStep):
             self.next_steps.append(step)
 
     def complete_step(self, customer_id, env, writer) -> int:
-        print(f"Doing {self.step_name} at {env.now}")
+        # print(f"Doing {self.step_name} at {env.now}")
 
         
         yield env.timeout(self.time_length)

@@ -47,7 +47,8 @@ class EventlogStep():
 
         
     def complete_step(self, customer_id, env, writer) -> int:
-        print(f"Doing {self.step_name} at {env.now}")
+        if (self.step_name == "Application Received" or self.step_name == "Customer contacted"):
+            print(f"Doing {self.step_name} at {self.disp_time(env.now)}")
 
         if self.resource != None: 
             yield env.process(self.resource.complete_job(env, self.time_length))

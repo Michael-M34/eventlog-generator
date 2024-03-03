@@ -43,7 +43,7 @@ class TillNextDayDelay(EventlogStep):
             time_mins = env.now % self.days_to_mins(7)
 
             # If the current time is after friday end hour, wait until monday morning at start hour
-            if time_mins > self.days_to_mins(4) + self.hours_to_mins(self.end_hour) - 1:
+            if time_mins >= self.days_to_mins(4) + self.hours_to_mins(self.end_hour):
                 yield env.timeout((self.days_to_mins(7) + self.hours_to_mins(self.start_hour)) - time_mins)
             
             # If it's before start hour on a business day, wait until start hour
@@ -51,11 +51,15 @@ class TillNextDayDelay(EventlogStep):
                 yield env.timeout(self.hours_to_mins(self.start_hour) - (time_mins % self.days_to_mins(1)))
 
             # If it's after end hour on a business day, wait until start hour next day
-            elif (time_mins % self.days_to_mins(1)) > self.hours_to_mins(self.end_hour):
+            elif (time_mins % self.days_to_mins(1)) >= self.hours_to_mins(self.end_hour):
                 yield env.timeout(self.days_to_mins(1) + self.hours_to_mins(self.start_hour) - (time_mins % self.days_to_mins(1)))
 
+            else:
+                print(4)
+                exit(1)
+
     def complete_step(self, customer_id, env, writer) -> int:
-        print(f"Doing delay {self.step_name} at {env.now}")
+        # print(f"Doing delay {self.step_name} at {env.now}")
 
         if self.in_working_hours(env.now):
             yield env.timeout(self.hours_to_mins(8))
@@ -63,7 +67,6 @@ class TillNextDayDelay(EventlogStep):
         yield env.process(self.wait_until_working_hours(env))
 
         # print("Next possible steps are: ", [x[0] for x in self.next_steps])
-        print("Leaving step")
 
         if len(self.next_steps) == 0:
             return -1

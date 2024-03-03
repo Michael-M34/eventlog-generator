@@ -75,7 +75,7 @@ class EventlogResource:
 
         job_queue_priority = 10
 
-        print("Starting job")
+        # print("Starting job")
         
 
         while True:
@@ -84,7 +84,7 @@ class EventlogResource:
                 yield resource
 
                 if self.in_resource_working_hours(env.now) and self.in_resource_working_hours(env.now + job_time_mins):
-                    print(f'Starting job at time at {self.disp_time(env.now)}')
+                    # print(f'Starting job at time at {self.disp_time(env.now)}')
                     yield env.timeout(job_time_mins)
                     break
 
@@ -96,7 +96,7 @@ class EventlogResource:
 
             job_queue_priority = 0
 
-        print(f'Finishing job at time at {self.disp_time(env.now)}')
+        # print(f'Finishing job at time at {self.disp_time(env.now)}')
 
         
 

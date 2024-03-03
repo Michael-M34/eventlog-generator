@@ -113,11 +113,14 @@ class EventlogEnvironment:
             
 
         # Complete the orders for each customer
-        for customer_id in customer_ids:
-            self.env.process(self.complete_run(customer_id, generate_event(starting_points)))
-            # self.env.timeout(wait_between_orders)
+        self.env.process(self.queue_up_orders(customer_ids, wait_between_orders, starting_points))
         
         self.env.run()
+
+    def queue_up_orders(self, customer_ids: list, wait_between_orders: int, starting_points: list):
+        for customer_id in customer_ids:
+            self.env.process(self.complete_run(customer_id, generate_event(starting_points)))
+            yield self.env.timeout(wait_between_orders)
 
 
 
@@ -133,7 +136,7 @@ class EventlogEnvironment:
         step_id = self.get_step_id_from_name(entry_point)
 
         while (step_id != -1):
-            print(user_id, ": ", end="")
+            # print(user_id, ": ", end="")
             step_id = yield self.env.process(self.steps[step_id].complete_step(user_id, self.env, self.csv_writer))
 
     def __del__(self):
